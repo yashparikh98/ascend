@@ -11,6 +11,9 @@
   --radius-xl: 26px;
   --radius-lg: 18px;
   --radius-md: 14px;
+  /* Font fallbacks to avoid network fetch at build time */
+  --font-manrope: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-fraunces: "DM Serif Display", Georgia, serif;
 }
 
 * {

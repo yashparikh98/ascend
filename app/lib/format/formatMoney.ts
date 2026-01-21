@@ -1,4 +1,4 @@
-import { Currency } from "../hooks/useCurrency";
+type Currency = "USD" | "INR";
 
 const formatters: Record<Currency, Intl.NumberFormat> = {
   INR: new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }),

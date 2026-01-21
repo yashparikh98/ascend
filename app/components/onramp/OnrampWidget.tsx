@@ -215,7 +215,7 @@ export default function OnrampWidget({ onClose }: { onClose: () => void }) {
 
         {apiKey && walletAddress && (
           <div className="iframe-container">
-            <MoonPayProvider apiKey={apiKey} theme={theme} debug>
+            <MoonPayProvider apiKey={apiKey} debug>
               <MoonPayBuyWidget
                 variant={widgetVariant as any}
                 visible

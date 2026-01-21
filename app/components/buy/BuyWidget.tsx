@@ -112,7 +112,13 @@ export default function BuyWidget({ onClose }: { onClose: () => void }) {
           <div className="info-card">
             <strong>Route ready</strong>
             <p className="muted">
-              Est. out: {quote.outAmount / 10 ** toAsset.decimals} {toAsset.symbol} • Impact: {(quote.priceImpactPct || 0) * 100}%
+              {(() => {
+                const out =
+                  Number(quote.outAmount ?? 0) /
+                  10 ** (toAsset?.decimals ?? 0);
+                const impact = Number(quote.priceImpactPct ?? 0) * 100;
+                return `Est. out: ${out.toFixed(6)} ${toAsset.symbol} • Impact: ${impact.toFixed(2)}%`;
+              })()}
             </p>
           </div>
         )}
