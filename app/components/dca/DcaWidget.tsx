@@ -92,8 +92,8 @@ export default function DcaWidget({ onClose }: { onClose: () => void }) {
     if (!Number.isFinite(perUsd) || perUsd <= 0) return "Enter an amount.";
     if (numberOfOrders < 2) return "Minimum 2 orders.";
     // Jupiter recurring minimums
-    if (totalUsd < 100) return "Minimum total deposit is $100.";
-    if (perUsd < 50) return "Minimum is $50 per order.";
+    if (totalUsd < 50) return "Minimum total deposit is $50.";
+    if (perUsd < 25) return "Minimum is $25 per order.";
     if (toAsset.mint === USDC.mint) return "Choose an asset other than USDC.";
     return null;
   }, [
