@@ -3,7 +3,7 @@ import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import BottomNav from "./components/BottomNav";
 import Topbar from "./components/layout/Topbar";
-import NavMenu from "./components/layout/NavMenu";
+import NavMenuWhenAuthed from "./components/layout/NavMenuWhenAuthed";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
@@ -33,7 +33,7 @@ export default function RootLayout({
           <div className="app-shell">
             <div className="app-frame">
               <Topbar />
-              <NavMenu links={navLinks} />
+              <NavMenuWhenAuthed links={navLinks} />
 
               <main className="page">{children}</main>
             </div>

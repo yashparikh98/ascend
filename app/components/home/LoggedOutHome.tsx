@@ -1,69 +1,9 @@
-// import LearnMoreModal from "./shared/LearnMoreModal";
-// import { useState } from "react";
-
-// const categories = ["Stocks", "Crypto", "Indices", "Pre-IPO", "Commodities"];
-// const trending = [
-//   { name: "NVDAx", move: "+2.1%" },
-//   { name: "MAG 7", move: "+0.9%" },
-//   { name: "Gold", move: "+0.3%" }
-// ];
-
-// export default function LoggedOutHome({ onPreview }: { onPreview: () => void }) {
-//   const [showModal, setShowModal] = useState(false);
-
-//   return (
-//     <div className="page">
-//       <section className="hero-card">
-//         <h1>Buy US Stocks, Crypto, and Indices.</h1>
-//         <p>Start in INR. Transparent fees. Simple experience.</p>
-//         <div className="hero-actions">
-//           <button className="pill primary">Connect wallet</button>
-//           <button className="pill">Create account</button>
-//         </div>
-//         <div className="scroll-row" aria-label="Categories">
-//           {categories.map((cat) => (
-//             <span key={cat} className="chip">
-//               {cat}
-//             </span>
-//           ))}
-//         </div>
-//         <div className="chip-row">
-//           <span className="chip">Regulated partners</span>
-//           <span className="chip">INR onramp</span>
-//           <span className="chip">Transparent fees</span>
-//         </div>
-//         <button className="pill" onClick={() => setShowModal(true)} type="button">
-//           Learn more
-//         </button>
-//         <button className="pill" onClick={onPreview} type="button">
-//           Preview dashboard
-//         </button>
-//       </section>
-
-//       <section className="card">
-//         <div className="section-title">
-//           <h2>Discover</h2>
-//           <span>Trending movers</span>
-//         </div>
-//         <div className="chip-row">
-//           {trending.map((item) => (
-//             <span key={item.name} className="chip">
-//               {item.name} {item.move}
-//             </span>
-//           ))}
-//         </div>
-//       </section>
-
-//       {showModal && <LearnMoreModal onClose={() => setShowModal(false)} />}
-//     </div>
-//   );
-// }
 import LearnMoreModal from "../shared/LearnMoreModal";
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { BASKETS } from "../../config/baskets";
-import { AssetLogo } from "../shared/AssetLogo";
 import { BasketLogo } from "../shared/BasketLogo";
-import { getAssetBySymbol } from "../../config/assets";
+import { DiscoverCard, DiscoverAsset } from "./DiscoverCard";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 type Props = {
   onPreview: () => void;
@@ -81,11 +21,37 @@ const categories = [
   { key: "Commodities", desc: "Gold, etc." },
 ];
 
-const trending = [
-  { symbol: "NVDAx", type: "Stock", move: "+2.1%" },
-  { symbol: "BTC", type: "Crypto", move: "-0.4%" },
-  { symbol: "MAG 7", type: "Index", move: "+0.9%" },
-  { symbol: "Gold", type: "Commodity", move: "+0.3%" },
+const discoverAssets: DiscoverAsset[] = [
+  {
+    symbol: "BTC",
+    name: "Bitcoin",
+    type: "Crypto",
+    change: "+3.2%",
+    timeframe: "24h",
+    price: "$42,180",
+    note: "24h performance",
+    sparkline: [40_200, 40_640, 41_120, 40_880, 41_760, 41_420, 41_960, 42_180],
+  },
+  {
+    symbol: "ETH",
+    name: "Ethereum",
+    type: "Crypto",
+    change: "+1.4%",
+    timeframe: "24h",
+    price: "$2,560",
+    note: "L1 smart contracts",
+    sparkline: [2_420, 2_460, 2_440, 2_510, 2_520, 2_540, 2_560, 2_555],
+  },
+  {
+    symbol: "NVDAx",
+    name: "NVIDIA",
+    type: "Stock",
+    change: "+1.1%",
+    timeframe: "Today",
+    price: "$608.10",
+    note: "US stock access",
+    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
+  },
 ];
 
 export default function LoggedOutHome({
@@ -96,26 +62,76 @@ export default function LoggedOutHome({
   onAsset,
 }: Props) {
   const [showModal, setShowModal] = useState(false);
+  const { setVisible } = useWalletModal();
 
-  const topTrending = useMemo(() => trending.slice(0, 4), []);
+  const handleConnect = useCallback(() => {
+    if (onConnect) {
+      onConnect();
+      return;
+    }
+    setVisible(true);
+  }, [onConnect, setVisible]);
 
   return (
     <div className="page">
       <section className="hero-card">
-        <h1>Buy US Stocks, Crypto, and Indices.</h1>
-        <p className="muted">
-          Start in INR. Transparent fees. Simple experience.
-        </p>
+        <div>
+          <h1>Access the Global Economy</h1>
+          <p className="muted">
+            Global stocks, commodities, crypto, and pre-IPO assets — all in one
+            non-custodial app.
+          </p>
+        </div>
 
-        {/* Single primary action + a clear secondary */}
         <div className="hero-actions">
-          <button className="pill primary" onClick={onConnect} type="button">
-            Connect wallet
+          <button
+            className="pill primary"
+            onClick={onCreateAccount ?? handleConnect}
+            type="button"
+          >
+            Get Early Access
           </button>
+        </div>
 
-          <button className="pill" onClick={onCreateAccount} type="button">
-            Create account
-          </button>
+        <div className="hero-highlight-grid">
+          <div className="hero-highlight">
+            <div className="hero-highlight__header">
+              <div className="hero-highlight__title">
+                <span className="hero-chip">Multi-asset</span>
+                <strong>Invest Through Baskets</strong>
+              </div>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Long-term, disciplined
+              </span>
+            </div>
+            <p className="muted">
+              Own multiple assets at once instead of picking individual trades.
+            </p>
+            <ul className="dot-list">
+              <li>Curated investment baskets</li>
+              <li>Built for long-term exposure</li>
+              <li>Simple, disciplined investing</li>
+            </ul>
+          </div>
+          <div className="hero-highlight">
+            <div className="hero-highlight__header">
+              <div className="hero-highlight__title">
+                <span className="hero-chip">Yield</span>
+                <strong>Earn on Your Cash</strong>
+              </div>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Stablecoins, on-chain
+              </span>
+            </div>
+            <p className="muted">
+              Uninvested cash earns up to 10% yield via stablecoins.
+            </p>
+            <ul className="dot-list">
+              <li>No lockups or cliffs</li>
+              <li>Transparent, fully on-chain</li>
+              <li>Move in or out anytime</li>
+            </ul>
+          </div>
         </div>
 
         {/* Make categories actionable + clearer than plain chips */}
@@ -142,72 +158,27 @@ export default function LoggedOutHome({
           <span className="chip">INR onramp</span>
           <span className="chip">Transparent fees</span>
         </div>
-
-        {/* Put 'Learn more' as a subtle link-like button */}
-        <div className="hero-actions" style={{ gap: 10 }}>
-          <button
-            className="pill"
-            onClick={() => setShowModal(true)}
-            type="button"
-          >
-            Learn more
-          </button>
-
-          {/* Make preview subtle so it doesn’t compete with onboarding */}
-          <button className="pill" onClick={onPreview} type="button">
-            Preview dashboard
-          </button>
-        </div>
       </section>
 
       {/* Discover should feel like real “things to buy”, not chips */}
       <section className="card">
         <div className="section-title">
           <h2>Discover</h2>
-          <span className="muted">Trending today</span>
+          <span className="muted">Trending now</span>
         </div>
 
-        <div className="list-compact" role="list">
-          {topTrending.map((item) => {
-            const asset = getAssetBySymbol(item.symbol);
-            const color = item.move.trim().startsWith("-")
-              ? "#c7393a"
-              : "#0f8f6a";
-            return (
-              <div key={item.symbol} className="list-item" role="listitem">
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <AssetLogo
-                    src={asset?.logoURI}
-                    alt={asset?.symbol}
-                    size={28}
-                  />
-                  <div>
-                    <strong>{item.symbol}</strong>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {item.type}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <span className="muted" style={{ color }}>
-                    {item.move}
-                  </span>
-                  <button
-                    className="pill"
-                    type="button"
-                    onClick={() => onAsset?.(item.symbol)}
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="discover-grid" role="list">
+          {discoverAssets.map((item) => (
+            <DiscoverCard key={item.symbol} item={item} onSelect={onAsset} />
+          ))}
         </div>
 
         <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-          <button className="pill primary" type="button" onClick={onConnect}>
+          <button
+            className="pill primary"
+            type="button"
+            onClick={handleConnect}
+          >
             Connect to invest
           </button>
           <button

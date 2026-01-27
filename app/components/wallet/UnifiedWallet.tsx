@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { CHAIN_NAMESPACES } from "@web3auth/base";
@@ -20,19 +26,53 @@ type WalletProviderName = "phantom" | "solflare" | "walletconnect";
 type ProviderName = WalletProviderName | "web3auth";
 
 type ActiveSession =
-  | {
-      kind: "wallet";
-      provider: WalletProviderName;
-      address: string;
-    }
-  | {
-      kind: "web3auth";
-      provider: "web3auth";
-      address: string;
-    };
+  | { kind: "wallet"; provider: WalletProviderName; address: string }
+  | { kind: "web3auth"; provider: "web3auth"; address: string };
+
+function normalizeProviderName(
+  adapterName: string | null
+): WalletProviderName | null {
+  if (!adapterName) return null;
+  const n = adapterName.toLowerCase();
+  if (n.includes("phantom")) return "phantom";
+  if (n.includes("solflare")) return "solflare";
+  if (n.includes("walletconnect")) return "walletconnect";
+  return null;
+}
+
+function humanizeWalletError(e: any) {
+  const msg = (e?.message ?? "").toLowerCase();
+  const name = (e?.name ?? "").toLowerCase();
+
+  // Most common “not smooth” case: user closes Phantom/Solflare popup
+  if (
+    name.includes("walletconnectionerror") ||
+    msg.includes("user rejected") ||
+    msg.includes("rejected")
+  ) {
+    return "Connection cancelled in wallet.";
+  }
+
+  if (msg.includes("not detected") || msg.includes("wallet not found")) {
+    return "Wallet not detected. Please install/enable it first.";
+  }
+
+  if (
+    msg.includes("already processing") ||
+    msg.includes("already connecting")
+  ) {
+    return "Wallet is already connecting. Please check your wallet popup.";
+  }
+
+  return e?.message ?? "Failed to connect wallet.";
+}
+
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
 
 export default function UnifiedWallet() {
-  const { connected, publicKey, wallet, wallets, select, connect, disconnect } =
+  const { connected, publicKey, wallet, wallets, disconnect, select } =
     useWallet();
 
   const { setVisible } = useWalletModal();
@@ -44,40 +84,25 @@ export default function UnifiedWallet() {
   const [web3authReady, setWeb3authReady] = useState(false);
   const [web3authAddress, setWeb3authAddress] = useState<string | null>(null);
 
-  const [busy, setBusy] = useState<
-    null | "phantom" | "solflare" | "web3auth" | "disconnect"
-  >(null);
+  const [busy, setBusy] = useState<null | "wallet" | "web3auth" | "disconnect">(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
-  // -------- Helpers --------
+  // prevents double clicks / double connect races
+  const inflightRef = useRef(false);
 
-  const solanaWalletAddress = useMemo(() => {
-    return publicKey?.toBase58() ?? null;
-  }, [publicKey]);
-
-  const walletAdapterName = useMemo(() => {
-    return wallet?.adapter?.name ?? null;
-  }, [wallet]);
-
-  const detectedProvider = useMemo<WalletProviderName | null>(() => {
-    if (!connected || !walletAdapterName) return null;
-
-    const name = walletAdapterName.toLowerCase();
-    if (name.includes("phantom")) return "phantom";
-    if (name.includes("solflare")) return "solflare";
-    if (name.includes("walletconnect")) return "walletconnect";
-
-    // If some other adapter is used, don't pretend it's Phantom.
-    // Returning null prevents creating an invalid ActiveSession.
-    return null;
-  }, [connected, walletAdapterName]);
-
-  const getWalletAdapterName = useCallback(
-    (name: "Phantom" | "Solflare") => {
-      const found = wallets.find((w) => w.adapter.name === name);
-      return found?.adapter.name ?? null;
-    },
-    [wallets]
+  const solanaWalletAddress = useMemo(
+    () => publicKey?.toBase58() ?? null,
+    [publicKey]
+  );
+  const walletAdapterName = useMemo(
+    () => wallet?.adapter?.name ?? null,
+    [wallet]
+  );
+  const detectedProvider = useMemo(
+    () => normalizeProviderName(walletAdapterName),
+    [walletAdapterName]
   );
 
   async function fetchWeb3AuthAddress(
@@ -95,13 +120,9 @@ export default function UnifiedWallet() {
   }
 
   // -------- Web3Auth init --------
-
   const initializeWeb3Auth = useCallback(async () => {
     const clientId = process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID;
-    if (!clientId) {
-      // Not an error; allow app to run without Web3Auth.
-      return;
-    }
+    if (!clientId) return;
 
     const rpcTarget =
       process.env.NEXT_PUBLIC_SOLANA_RPC_URL ??
@@ -111,7 +132,7 @@ export default function UnifiedWallet() {
       config: {
         chainConfig: {
           chainNamespace: CHAIN_NAMESPACES.SOLANA,
-          chainId: "0x1", // mainnet-beta
+          chainId: "0x1",
           rpcTarget,
           displayName: "Solana Mainnet",
           blockExplorerUrl: "https://explorer.solana.com",
@@ -150,13 +171,10 @@ export default function UnifiedWallet() {
   }, []);
 
   useEffect(() => {
-    if (!web3auth && !web3authReady) {
-      initializeWeb3Auth();
-    }
+    if (!web3auth && !web3authReady) initializeWeb3Auth();
   }, [web3auth, web3authReady, initializeWeb3Auth]);
 
-  // -------- Active session (source of truth for UI + auth sync) --------
-
+  // -------- Active session --------
   const activeSession = useMemo<ActiveSession | null>(() => {
     if (connected && solanaWalletAddress && detectedProvider) {
       return {
@@ -165,7 +183,6 @@ export default function UnifiedWallet() {
         address: solanaWalletAddress,
       };
     }
-
     if (web3auth?.connected && web3authAddress) {
       return {
         kind: "web3auth",
@@ -173,7 +190,6 @@ export default function UnifiedWallet() {
         address: web3authAddress,
       };
     }
-
     return null;
   }, [
     connected,
@@ -183,8 +199,7 @@ export default function UnifiedWallet() {
     web3authAddress,
   ]);
 
-  // -------- Sync AuthContext (avoid thrashing) --------
-
+  // -------- Sync AuthContext (no thrash) --------
   useEffect(() => {
     if (!activeSession) {
       if (isAuthenticated) setAuthenticated(false, null, null);
@@ -209,138 +224,161 @@ export default function UnifiedWallet() {
     setAuthenticated,
   ]);
 
-  // -------- Actions --------
+  // -------- Hard single-session switch --------
+  const ensureNoOtherSession = useCallback(
+    async (target: "wallet" | "web3auth") => {
+      // close wallet modal always before any connect attempt
+      setVisible(false);
 
-  const waitForSelectedWallet = (
-    expectedAdapterName: string,
-    getCurrentName: () => string | null,
-    timeoutMs = 2500
-  ) => {
-    return new Promise<void>((resolve, reject) => {
-      const start = Date.now();
-
-      const tick = () => {
-        const current = getCurrentName();
-        if (current === expectedAdapterName) return resolve();
-        if (Date.now() - start > timeoutMs) {
-          return reject(new Error("Wallet selection timed out"));
-        }
-        requestAnimationFrame(tick);
-      };
-
-      tick();
-    });
-  };
-
-  const connectWalletAdapter = useCallback(
-    async (adapterName: "Phantom" | "Solflare") => {
-      setError(null);
-      setBusy(adapterName === "Phantom" ? "phantom" : "solflare");
-
-      try {
-        // Single-session rule: if Web3Auth connected, log it out first
+      if (target === "wallet") {
         if (web3auth?.connected) {
-          await web3auth.logout();
+          try {
+            await web3auth.logout();
+          } catch {}
           setWeb3authAddress(null);
         }
+        return;
+      }
 
-        const walletEntry = wallets.find((w) => w.adapter.name === adapterName);
-        if (!walletEntry) {
-          throw new Error(
-            `${adapterName} adapter not found. Check WalletProvider wallets list.`
-          );
-        }
-
-        // If the wallet is not detected in the browser, show a friendly message.
-        if (walletEntry.adapter.readyState === "NotDetected") {
-          setError(
-            `${adapterName} not detected. Install or enable the extension/app.`
-          );
-          return;
-        }
-
-        // If already connected to same adapter, disconnect
-        if (connected && wallet?.adapter?.name === adapterName) {
-          await disconnect();
-          return;
-        }
-
-        // If connected to some other wallet, disconnect first
+      if (target === "web3auth") {
         if (connected) {
-          await disconnect();
+          try {
+            await disconnect();
+          } catch {}
         }
-
-        // ✅ Select first
-        select(walletEntry.adapter.name as any);
-
-        // ✅ Wait until selection is actually applied in wallet-adapter state
-        await waitForSelectedWallet(
-          adapterName,
-          () => wallet?.adapter?.name ?? null,
-          2500
-        );
-
-        // ✅ Now connect safely
-        await connect();
-      } catch (e: any) {
-        console.error(`${adapterName} connect error:`, e);
-
-        // Optional: make WalletNotSelectedError user-friendly
-        const msg =
-          e?.name === "WalletNotSelectedError"
-            ? "Please select a wallet again."
-            : e instanceof Error && e.message
-            ? e.message
-            : `Failed to connect ${adapterName}.`;
-
-        setError(msg);
-      } finally {
-        setBusy(null);
+        return;
       }
     },
-    [web3auth, wallets, connected, wallet, disconnect, select, connect]
+    [connected, disconnect, setVisible, web3auth]
   );
 
+  // -------- Wallet connect (robust) --------
+  const connectAdapterByName = useCallback(
+    async (adapterName: string) => {
+      if (inflightRef.current) return;
+      inflightRef.current = true;
+
+      setError(null);
+      setBusy("wallet");
+
+      try {
+        await ensureNoOtherSession("wallet");
+
+        const entry = wallets.find((w) => w.adapter.name === adapterName);
+        if (!entry) throw new Error(`${adapterName} adapter not found`);
+
+        // Let wallet-adapter decide if it can connect; "NotDetected" should be blocked for smooth UX
+        if (entry.adapter.readyState === "NotDetected") {
+          throw new Error(`${adapterName} not detected. Install or enable it.`);
+        }
+
+        // Select + give React a tick to commit selection in context
+        select(entry.adapter.name as any);
+        await sleep(0);
+
+        // Connecting directly via adapter is usually smoother / less racey than calling connect()
+        await entry.adapter.connect();
+
+        // Always close wallet modal after successful connect
+        setVisible(false);
+      } catch (e: any) {
+        console.error("Wallet connect failed:", e);
+        setError(humanizeWalletError(e));
+      } finally {
+        setBusy(null);
+        inflightRef.current = false;
+      }
+    },
+    [ensureNoOtherSession, select, setVisible, wallets]
+  );
+
+  const getBestInstalledWallet = useCallback(() => {
+    // prefer installed/loadable wallets (Phantom > Solflare)
+    const installed = wallets.filter((w) =>
+      ["Installed", "Loadable"].includes(w.adapter.readyState)
+    );
+
+    const phantom = installed.find((w) =>
+      w.adapter.name.toLowerCase().includes("phantom")
+    );
+    const solflare = installed.find((w) =>
+      w.adapter.name.toLowerCase().includes("solflare")
+    );
+    return phantom ?? solflare ?? installed[0] ?? null;
+  }, [wallets]);
+
+  const handleConnectWallet = useCallback(async () => {
+    setError(null);
+
+    const pick = getBestInstalledWallet();
+    if (pick) {
+      await connectAdapterByName(pick.adapter.name);
+      return;
+    }
+
+    // No installed wallets: show wallet-adapter modal (smooth fallback)
+    setVisible(true);
+  }, [connectAdapterByName, getBestInstalledWallet, setVisible]);
+
+  // -------- Web3Auth connect (smooth, no modal fights) --------
   const handleConnectWeb3Auth = useCallback(async () => {
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+
     setError(null);
     setBusy("web3auth");
 
     try {
       if (!web3auth) throw new Error("Web3Auth not initialized");
 
-      // Single-session rule: if wallet-adapter connected, disconnect first
-      if (connected) {
-        await disconnect();
-      }
+      await ensureNoOtherSession("web3auth");
 
+      // if already connected, treat as toggle logout
       if (web3auth.connected) {
         await web3auth.logout();
         setWeb3authAddress(null);
         return;
       }
 
+      // Make sure wallet-adapter modal is closed so it doesn't overlap
+      setVisible(false);
+
       await web3auth.connect();
       const addr = await fetchWeb3AuthAddress(web3auth);
       setWeb3authAddress(addr);
 
-      if (!addr) {
-        setError("Connected, but could not fetch address.");
-      }
-    } catch (e) {
+      if (!addr) setError("Connected, but could not fetch address.");
+    } catch (e: any) {
       console.error("Web3Auth connect error:", e);
-      setError("Failed to connect Web3Auth.");
+      setError(e?.message ?? "Failed to connect Social Login.");
     } finally {
       setBusy(null);
+      inflightRef.current = false;
     }
-  }, [web3auth, connected, disconnect]);
+  }, [ensureNoOtherSession, setVisible, web3auth]);
 
   const handleDisconnect = useCallback(async () => {
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+
     setError(null);
     setBusy("disconnect");
 
     try {
-      if (connected) await disconnect();
-      if (web3auth?.connected) await web3auth.logout();
+      setVisible(false);
+
+      if (connected) {
+        try {
+          await disconnect();
+        } catch {}
+      }
+
+      if (web3auth?.connected) {
+        try {
+          await web3auth.logout();
+        } catch {}
+      }
+
       setWeb3authAddress(null);
       setAuthenticated(false, null, null);
     } catch (e) {
@@ -348,22 +386,26 @@ export default function UnifiedWallet() {
       setError("Failed to disconnect.");
     } finally {
       setBusy(null);
+      inflightRef.current = false;
     }
-  }, [connected, disconnect, web3auth, setAuthenticated]);
+  }, [connected, disconnect, setAuthenticated, setVisible, web3auth]);
+
+  // Close wallet modal after successful wallet connect (prevents it staying open)
+  useEffect(() => {
+    if (connected) setVisible(false);
+  }, [connected, setVisible]);
 
   // -------- Display --------
-
   const displayProviderLabel = useMemo(() => {
     if (!activeSession) return "Not connected";
     return activeSession.provider === "web3auth"
-      ? "Web3Auth"
+      ? "Social"
       : activeSession.provider.toUpperCase();
   }, [activeSession]);
 
   const displayAddress = activeSession?.address ?? null;
 
   // -------- UI --------
-
   if (activeSession && displayAddress) {
     return (
       <div className="wallet-bar">
@@ -401,20 +443,11 @@ export default function UnifiedWallet() {
       <div className="wallet-actions">
         <button
           className="pill"
-          onClick={() => connectWalletAdapter("Phantom")}
+          onClick={handleConnectWallet}
           disabled={busy !== null}
           type="button"
         >
-          {busy === "phantom" ? "Connecting..." : "Phantom"}
-        </button>
-
-        <button
-          className="pill"
-          onClick={() => connectWalletAdapter("Solflare")}
-          disabled={busy !== null}
-          type="button"
-        >
-          {busy === "solflare" ? "Connecting..." : "Solflare"}
+          {busy === "wallet" ? "Connecting..." : "Phantom"}
         </button>
 
         <button
@@ -427,17 +460,7 @@ export default function UnifiedWallet() {
             ? "Loading..."
             : busy === "web3auth"
             ? "Connecting..."
-            : "Social"}
-        </button>
-
-        {/* Optional: use wallet-adapter's built-in selection modal */}
-        <button
-          className="pill"
-          onClick={() => setVisible(true)}
-          disabled={busy !== null}
-          type="button"
-        >
-          More
+            : "Social Login"}
         </button>
       </div>
 

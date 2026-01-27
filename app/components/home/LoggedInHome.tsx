@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import useCurrency from "../../hooks/useCurrency";
 import useAuth from "../../hooks/useAuth";
 import { formatMoney } from "../../lib/format/formatMoney";
@@ -11,14 +12,28 @@ import DcaWidget from "../dca/DcaWidget";
 import BasketWidget from "../basket/BasketWidget";
 import { BASKETS } from "../../config/baskets";
 import { AssetLogo } from "../shared/AssetLogo";
-import { getAssetBySymbol, getAssetByMint } from "../../config/assets";
+import {
+  getAssetBySymbol,
+  getAssetByMint,
+  CATEGORY_LABELS,
+  type AssetCategory,
+} from "../../config/assets";
 import { BasketLogo } from "../shared/BasketLogo";
 import ExploreBaskets from "./ExploreBaskets";
 import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
 import { USDC } from "../../config/tokens";
+import { DiscoverCard, DiscoverAsset } from "./DiscoverCard";
 
 const fxRate = 83; // USD -> INR (mock)
+
+const CATEGORY_ROUTE: Record<AssetCategory, string> = {
+  stocks: "/stocks",
+  crypto: "/crypto",
+  "pre-ipo": "/pre-ipo",
+  commodities: "/commodities",
+  index: "/indices",
+};
 
 // If a token has no live price yet, we show a fallback and mark "est."
 const PRICE_FALLBACKS_USD_BY_SYMBOL: Record<string, number> = {
@@ -50,29 +65,86 @@ const PRICE_FALLBACKS_USD_BY_SYMBOL: Record<string, number> = {
 // Support both old/canonical mints and new "Xs" mints by normalizing to the Xs mint (primary)
 const MINT_TO_PRIMARY: Record<string, string> = {
   // Primary Xs mints
-  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh", // NVDAx
-  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", // AAPLx
-  Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg: "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg", // AMZNx
-  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB", // TSLAx
-  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN", // GOOGLx
-  Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu: "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu", // METAx
-  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX: "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX", // MSFTx
+  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh:
+    "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh", // NVDAx
+  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp:
+    "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", // AAPLx
+  Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg:
+    "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg", // AMZNx
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB:
+    "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB", // TSLAx
+  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN:
+    "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN", // GOOGLx
+  Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu:
+    "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu", // METAx
+  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX:
+    "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX", // MSFTx
 
   // Canonical mainnet mints -> primary Xs mints (backward compatibility)
-  "9gwTegFJJErDpWJKjPfLr2g2zrE3nL1v5zpwbtsk3c6P": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
-  HLm32fkK51wSi8TM9DvFmPuKjNbKzPkCTrXPnygsMVUp: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
-  "7VDEsKBXWSjVVaVzqz5vfuU2G5xCXvVRjTHqP9Kjqwn1": "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
-  "3n3LPMZ4PTLpKqTxkHfrAtqdqFKUxzGbrBhi7qKHnipG": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
-  "67So6HhEkba1cPTJ2KUQGCE2t5M9YnJLCBq4gQ1NyLAn": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
-  METADDFL6wWMWEoKTFJwcThTbUmtarRJZjRpzUvkxhr: "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
-  ANNmJmGxHwUsVRnqfLfbcH3eH1f1YuBDGoMbgeAt9zLP: "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX"
+  "9gwTegFJJErDpWJKjPfLr2g2zrE3nL1v5zpwbtsk3c6P":
+    "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+  HLm32fkK51wSi8TM9DvFmPuKjNbKzPkCTrXPnygsMVUp:
+    "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+  "7VDEsKBXWSjVVaVzqz5vfuU2G5xCXvVRjTHqP9Kjqwn1":
+    "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
+  "3n3LPMZ4PTLpKqTxkHfrAtqdqFKUxzGbrBhi7qKHnipG":
+    "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+  "67So6HhEkba1cPTJ2KUQGCE2t5M9YnJLCBq4gQ1NyLAn":
+    "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+  METADDFL6wWMWEoKTFJwcThTbUmtarRJZjRpzUvkxhr:
+    "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+  ANNmJmGxHwUsVRnqfLfbcH3eH1f1YuBDGoMbgeAt9zLP:
+    "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
 };
 
 const trending = [
   { symbol: "AMZNx", move: "+2.3%" },
   { symbol: "METAx", move: "+1.4%" },
-  { symbol: "SOL", move: "+0.9%" },
+  { symbol: "xSPACEX", move: "+2.4%" },
   { symbol: "MAG7", basketId: "mag7", move: "+0.8%" },
+];
+
+const discoverAssets: DiscoverAsset[] = [
+  {
+    symbol: "BTC",
+    name: "Bitcoin",
+    type: "Crypto",
+    change: "+3.2%",
+    timeframe: "24h",
+    price: "$42,180",
+    note: "Crypto",
+    sparkline: [40_200, 40_640, 41_120, 40_880, 41_760, 41_420, 41_960, 42_180],
+  },
+  {
+    symbol: "ETH",
+    name: "Ethereum",
+    type: "Crypto",
+    change: "+1.4%",
+    timeframe: "24h",
+    price: "$2,560",
+    note: "Crypto",
+    sparkline: [2_420, 2_460, 2_440, 2_510, 2_520, 2_540, 2_560, 2_555],
+  },
+  {
+    symbol: "NVDAx",
+    name: "NVIDIA",
+    type: "Stock",
+    change: "+1.1%",
+    timeframe: "Today",
+    price: "$608.10",
+    note: "US stock access",
+    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
+  },
+  {
+    symbol: "xSPACEX",
+    name: "SpaceX",
+    type: "Pre-IPO",
+    change: "+2.4%",
+    timeframe: "Today",
+    price: "$85.00",
+    note: "Pre-IPO access",
+    sparkline: [78, 80, 81, 82, 83.5, 84, 84.6, 85],
+  },
 ];
 
 type ActiveModal = "buy" | "onramp" | "dca" | "basket" | null;
@@ -101,7 +173,7 @@ function formatUSD(n: number) {
 export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
   const { currency } = useCurrency();
   const { walletAddress } = useAuth();
-
+  const router = useRouter();
   const {
     data: balances,
     isLoading: balancesLoading,
@@ -130,7 +202,6 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [preselectSymbol, setPreselectSymbol] = useState<string | null>(null);
   const [basketId, setBasketId] = useState(BASKETS[0]?.id ?? "");
-  const [showAllHoldings, setShowAllHoldings] = useState(false);
 
   const changeColor = useCallback((value: string) => {
     const v = value.trim();
@@ -156,6 +227,7 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
         const name = asset?.name ?? "Unknown token";
         const ticker = asset?.ticker ?? symbol.replace(/x$/i, "");
         const logoURI = asset?.logoURI;
+        const category = asset?.category as AssetCategory | undefined;
 
         // Price in USD from live prices hook
         const live = safeNumber(
@@ -179,6 +251,7 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
           name,
           ticker,
           logoURI,
+          category,
           priceUsd,
           isPriceFallback,
           valueUsd,
@@ -203,6 +276,37 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
   }, [balances, pricesUsdByMint]);
 
   const cashUsd = safeNumber(balances?.[USDC.mint]?.uiAmount, 0);
+
+  const groupedHoldings = useMemo(() => {
+    const groups: Record<
+      AssetCategory,
+      { totalUsd: number; count: number; logos: string[] }
+    > = {
+      stocks: { totalUsd: 0, count: 0, logos: [] },
+      crypto: { totalUsd: 0, count: 0, logos: [] },
+      "pre-ipo": { totalUsd: 0, count: 0, logos: [] },
+      commodities: { totalUsd: 0, count: 0, logos: [] },
+      index: { totalUsd: 0, count: 0, logos: [] },
+    };
+
+    holdings.forEach((h) => {
+      if (!h.category) return;
+      const g = groups[h.category];
+      g.totalUsd += safeNumber(h.valueUsd, 0);
+      g.count += 1;
+      if (h.logoURI && g.logos.length < 4 && !g.logos.includes(h.logoURI)) {
+        g.logos.push(h.logoURI);
+      }
+    });
+
+    return (Object.keys(groups) as AssetCategory[])
+      .map((cat) => ({
+        category: cat,
+        ...groups[cat],
+      }))
+      .filter((g) => g.count > 0)
+      .sort((a, b) => b.totalUsd - a.totalUsd);
+  }, [holdings]);
 
   const totals = useMemo(() => {
     const holdingsValueUsd = holdings.reduce(
@@ -237,10 +341,6 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
       fxRate,
     });
   }, [currency, cashUsd]);
-
-  const visibleHoldings = useMemo(() => {
-    return showAllHoldings ? holdings : holdings.slice(0, 8);
-  }, [holdings, showAllHoldings]);
 
   const openBuy = useCallback((symbol?: string) => {
     if (symbol) setPreselectSymbol(symbol);
@@ -360,98 +460,69 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
       <section className="card">
         <div className="section-title">
           <h2>Holdings</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {holdings.length > 8 && (
-              <button
-                className="pill compact"
-                type="button"
-                onClick={() => setShowAllHoldings((v) => !v)}
-              >
-                {showAllHoldings
-                  ? "Show less"
-                  : `View all (${holdings.length})`}
-              </button>
-            )}
-            <button className="pill" type="button" onClick={() => openBuy()}>
-              Invest more
-            </button>
-          </div>
+          <button className="pill" type="button" onClick={() => openBuy()}>
+            Invest more
+          </button>
         </div>
 
-        {visibleHoldings.length === 0 ? (
+        {groupedHoldings.length === 0 ? (
           <div className="info-card">
             <strong>No holdings yet</strong>
             <p className="muted">Buy your first asset to see it here.</p>
           </div>
         ) : (
           <div className="list-compact">
-            {visibleHoldings.map((h) => {
-              const priceInr = h.priceUsd > 0 ? h.priceUsd * fxRate : 0;
-              const valueInr = h.valueUsd * fxRate;
+            {groupedHoldings.map((group) => {
+              const display = formatMoney({
+                usdAmount: group.totalUsd,
+                inrAmount: group.totalUsd * fxRate,
+                currency,
+                fxRate,
+              });
+
+              const route = CATEGORY_ROUTE[group.category];
 
               return (
                 <button
-                  key={h.mint}
+                  key={group.category}
                   className="list-item"
                   type="button"
-                  onClick={() => openBuy(h.symbol)}
+                  onClick={() => router.push(route)}
                   style={{ width: "100%", textAlign: "left" }}
                 >
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    style={{ display: "flex", gap: 12, alignItems: "center" }}
                   >
-                    <AssetLogo src={h.logoURI} alt={h.symbol} size={32} />
-                    <div style={{ display: "grid", gap: 2 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "baseline",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <strong>{h.symbol}</strong>
-                        <span className="muted" style={{ fontSize: 12 }}>
-                          {h.ticker}
-                        </span>
-                        <span
-                          style={{ color: changeColor(h.change), fontSize: 12 }}
+                    <div style={{ display: "flex" }}>
+                      {group.logos.map((logo, idx) => (
+                        <div
+                          key={logo}
+                          style={{
+                            marginLeft: idx === 0 ? 0 : -10,
+                            borderRadius: "999px",
+                            border: "2px solid var(--surface)",
+                            background: "var(--surface)",
+                          }}
                         >
-                          {h.change}
-                        </span>
-                      </div>
-
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {h.name}
-                      </div>
-
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {h.uiAmount.toLocaleString(undefined, {
-                          maximumFractionDigits: 6,
-                        })}{" "}
-                        {h.symbol} •{" "}
-                        {h.priceUsd > 0 ? (
-                          <>
-                            {formatINR(priceInr)}
-                            {h.isPriceFallback ? (
-                              <span className="muted"> • est.</span>
-                            ) : null}
-                            <span className="muted">
-                              {" "}
-                              ({formatUSD(h.priceUsd)})
-                            </span>
-                          </>
-                        ) : (
-                          <span className="muted">Price unavailable</span>
-                        )}
-                      </div>
+                          <AssetLogo src={logo} alt="asset" size={32} />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <strong>{CATEGORY_LABELS[group.category]}</strong>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        {group.count} holding{group.count === 1 ? "" : "s"}
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right", display: "grid", gap: 2 }}>
-                    <strong>{formatINR(valueInr)}</strong>
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      {formatUSD(h.valueUsd)}
+                  <div style={{ textAlign: "right" }}>
+                    <strong>{display.primaryText}</strong>
+                    <span
+                      className="muted"
+                      style={{ fontSize: 12, display: "block" }}
+                    >
+                      {display.secondaryText}
                     </span>
                   </div>
                 </button>
@@ -468,48 +539,14 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
           <span className="muted">Trending movers</span>
         </div>
 
-        <div className="chip-row">
-          {trending.map((item) => {
-            const asset = getAssetBySymbol(item.symbol);
-            const basket = item.basketId
-              ? BASKETS.find((b) => b.id === item.basketId)
-              : undefined;
-            const color = changeColor(item.move);
-
-            return (
-              <button
-                key={item.symbol}
-                className="chip"
-                type="button"
-                onClick={() => {
-                  if (basket) openBasket(basket.id);
-                  else openBuy(item.symbol);
-                }}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                }}
-              >
-                {basket ? (
-                  <BasketLogo basket={basket} size={22} />
-                ) : (
-                  <AssetLogo
-                    src={asset?.logoURI}
-                    alt={asset?.symbol ?? item.symbol}
-                    size={22}
-                  />
-                )}
-                <span>{item.symbol}</span>
-                <span style={{ color }}>{item.move}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Tip: Tap a mover to invest instantly.
+        <div className="discover-grid" role="list">
+          {discoverAssets.map((item) => (
+            <DiscoverCard
+              key={item.symbol}
+              item={item}
+              onSelect={(symbol) => openBuy(symbol)}
+            />
+          ))}
         </div>
       </section>
 

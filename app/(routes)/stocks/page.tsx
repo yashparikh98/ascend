@@ -9,6 +9,53 @@ import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
 import BuyWidget from "../../components/buy/BuyWidget";
 import OnrampWidget from "../../components/onramp/OnrampWidget";
+import {
+  DiscoverAsset,
+  DiscoverCard,
+} from "../../components/home/DiscoverCard";
+
+const discoverStocks: DiscoverAsset[] = [
+  {
+    symbol: "NVDAx",
+    name: "NVIDIA",
+    type: "Stock",
+    change: "+1.1%",
+    timeframe: "Today",
+    price: "$608.10",
+    note: "US stock access",
+    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
+  },
+  {
+    symbol: "AAPLx",
+    name: "Apple",
+    type: "Stock",
+    change: "+0.8%",
+    timeframe: "Today",
+    price: "$192.44",
+    note: "Consumer tech",
+    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
+  },
+  {
+    symbol: "AMZNx",
+    name: "Amazon",
+    type: "Stock",
+    change: "+1.4%",
+    timeframe: "Today",
+    price: "$186.12",
+    note: "E-commerce",
+    sparkline: [180, 181, 182.4, 183.2, 184.1, 185.4, 186.1, 186.1],
+  },
+  {
+    symbol: "MSFTx",
+    name: "Microsoft",
+    type: "Stock",
+    change: "+0.9%",
+    timeframe: "Today",
+    price: "$421.12",
+    note: "Productivity + AI",
+    sparkline: [410, 412, 414, 415.6, 417.2, 419, 420.4, 421.1],
+  },
+];
 
 const fxRate = 83; // INR conversion (mock)
 // Fallbacks for xStocks when live price is missing
@@ -25,21 +72,35 @@ const PRICE_FALLBACKS: Record<string, number> = {
 // Normalize mints to the Xs versions (primary) so quotes & holdings align
 const MINT_TO_PRIMARY: Record<string, string> = {
   // Primary Xs mints
-  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh", // NVDAx
-  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", // AAPLx
-  Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg: "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg", // AMZNx
-  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB", // TSLAx
-  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN", // GOOGLx
-  Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu: "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu", // METAx
-  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX: "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX", // MSFTx
+  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh:
+    "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh", // NVDAx
+  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp:
+    "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", // AAPLx
+  Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg:
+    "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg", // AMZNx
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB:
+    "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB", // TSLAx
+  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN:
+    "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN", // GOOGLx
+  Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu:
+    "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu", // METAx
+  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX:
+    "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX", // MSFTx
   // Canonical mints -> primary Xs mints (backward compat)
-  "9gwTegFJJErDpWJKjPfLr2g2zrE3nL1v5zpwbtsk3c6P": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
-  HLm32fkK51wSi8TM9DvFmPuKjNbKzPkCTrXPnygsMVUp: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
-  "7VDEsKBXWSjVVaVzqz5vfuU2G5xCXvVRjTHqP9Kjqwn1": "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
-  "3n3LPMZ4PTLpKqTxkHfrAtqdqFKUxzGbrBhi7qKHnipG": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
-  "67So6HhEkba1cPTJ2KUQGCE2t5M9YnJLCBq4gQ1NyLAn": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
-  METADDFL6wWMWEoKTFJwcThTbUmtarRJZjRpzUvkxhr: "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
-  ANNmJmGxHwUsVRnqfLfbcH3eH1f1YuBDGoMbgeAt9zLP: "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX"
+  "9gwTegFJJErDpWJKjPfLr2g2zrE3nL1v5zpwbtsk3c6P":
+    "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+  HLm32fkK51wSi8TM9DvFmPuKjNbKzPkCTrXPnygsMVUp:
+    "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+  "7VDEsKBXWSjVVaVzqz5vfuU2G5xCXvVRjTHqP9Kjqwn1":
+    "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
+  "3n3LPMZ4PTLpKqTxkHfrAtqdqFKUxzGbrBhi7qKHnipG":
+    "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+  "67So6HhEkba1cPTJ2KUQGCE2t5M9YnJLCBq4gQ1NyLAn":
+    "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+  METADDFL6wWMWEoKTFJwcThTbUmtarRJZjRpzUvkxhr:
+    "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+  ANNmJmGxHwUsVRnqfLfbcH3eH1f1YuBDGoMbgeAt9zLP:
+    "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
 };
 
 const topMovers = ["NVDAx", "AMZNx", "METAx"];
@@ -78,7 +139,8 @@ export default function StocksPage() {
         const uiAmount = bal?.uiAmount ?? 0;
         if (uiAmount <= 0) return null;
 
-        const price = prices?.[primaryMint] ?? PRICE_FALLBACKS[asset.symbol] ?? 0;
+        const price =
+          prices?.[primaryMint] ?? PRICE_FALLBACKS[asset.symbol] ?? 0;
         const valueUsd = uiAmount * price;
 
         return {
@@ -225,132 +287,21 @@ export default function StocksPage() {
           </div>
         )}
       </section>
-
       <section className="card">
         <div className="section-title">
           <h2>Top movers</h2>
-          <span className="muted">
-            Today {pricesLoading ? "• syncing…" : ""}
-          </span>
+          <span className="muted">Stocks only</span>
         </div>
-        <div className="chip-row">
-          {topMovers.map((sym) => {
-            const asset = getAssetBySymbol(sym);
-            const change = asset?.change24h ?? null;
-            const color = changeColor(change);
-            const price = asset
-              ? prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol]
-              : null;
-            return (
-              <button
-                key={sym}
-                className="chip"
-                type="button"
-                onClick={() => setShowBuy(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  color,
-                }}
-              >
-                <AssetLogo src={asset?.logoURI} alt={sym} size={22} />
-                <div style={{ display: "grid" }}>
-                  <span>{sym}</span>
-                  <span className="muted" style={{ color }}>
-                    {change
-                      ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`
-                      : "—"}
-                  </span>
-                  <span className="muted" style={{ fontSize: 11 }}>
-                    {price
-                      ? formatMoney({
-                          usdAmount: price,
-                          inrAmount: price * fxRate,
-                          currency,
-                          fxRate,
-                        }).primaryText
-                      : "Price unavailable"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Discover</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="muted">
-              Live pricing {pricesLoading ? "• syncing…" : ""}
-            </span>
-            <button
-              className="pill compact"
-              type="button"
-              onClick={() => refetchPrices()}
-            >
-              Refresh
-            </button>
-          </div>
+        <div className="discover-grid" role="list">
+          {discoverStocks.map((item) => (
+            <DiscoverCard
+              key={item.symbol}
+              item={item}
+              onSelect={() => setShowBuy(true)}
+            />
+          ))}
         </div>
-        {filtered.length === 0 ? (
-          <div className="info-card">
-            <strong>No matches</strong>
-            <p className="muted">Try another ticker or company name.</p>
-          </div>
-        ) : (
-          <div className="list-compact">
-            {filtered.map((asset) => {
-              const price =
-                prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol] ?? null;
-              const priceDisplay =
-                price !== null
-                  ? formatMoney({
-                      usdAmount: price,
-                      inrAmount: price * fxRate,
-                      currency,
-                      fxRate,
-                    }).primaryText
-                  : "Price unavailable";
-              const change = asset.change24h ?? null;
-              const color = changeColor(change);
-
-              return (
-                <button
-                  key={asset.mint}
-                  className="list-item"
-                  style={{ width: "100%", textAlign: "left" }}
-                  type="button"
-                  onClick={() => setShowBuy(true)}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <AssetLogo
-                      src={asset.logoURI}
-                      alt={asset.symbol}
-                      size={32}
-                    />
-                    <div>
-                      <strong>{asset.symbol}</strong>
-                      <p className="muted">{asset.name}</p>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <strong>{priceDisplay}</strong>
-                    <p className="muted" style={{ color }}>
-                      {change !== null
-                        ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`
-                        : "—"}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </section>
 
       <section className="info-card">
