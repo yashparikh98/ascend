@@ -1,5 +1,7 @@
 import { AssetLogo } from "../shared/AssetLogo";
-import { getAssetBySymbol } from "../../config/assets";
+import { BasketLogo } from "../shared/BasketLogo";
+import { getAssetBySymbol, getAssetByMint } from "../../config/assets";
+import { BASKETS } from "../../config/baskets";
 
 export type DiscoverAsset = {
   symbol: string;
@@ -10,6 +12,7 @@ export type DiscoverAsset = {
   price: string;
   sparkline: number[];
   note?: string;
+  basketId?: string;
 };
 
 export function getChangeColor(change: string) {
@@ -92,17 +95,28 @@ export function DiscoverCard({
   onSelect?: (symbol: string) => void;
 }) {
   const asset = getAssetBySymbol(item.symbol);
+  const basket = item.basketId
+    ? BASKETS.find((b) => b.id === item.basketId)
+    : undefined;
   const color = getChangeColor(item.change);
+  const basketLogos =
+    basket?.items
+      .map((i) => getAssetByMint(i.mint)?.logoURI)
+      .filter(Boolean) || [];
 
   return (
     <div className="asset-card" role="listitem">
       <div className="asset-card__top">
         <div className="asset-meta">
-          <AssetLogo
-            src={asset?.logoURI}
-            alt={asset?.symbol ?? item.symbol}
-            size={36}
-          />
+          {basket ? (
+            <BasketLogo basket={basket} size={36} />
+          ) : (
+            <AssetLogo
+              src={asset?.logoURI}
+              alt={asset?.symbol ?? item.symbol}
+              size={36}
+            />
+          )}
           <div>
             <strong>{item.name}</strong>
             <div className="muted" style={{ fontSize: 12 }}>
@@ -120,7 +134,23 @@ export function DiscoverCard({
         <span className="muted">{item.timeframe}</span>
       </div>
 
-      <Sparkline points={item.sparkline} color={color} id={item.symbol} />
+      {basket ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {basketLogos.slice(0, 7).map((logo, idx) => (
+              <AssetLogo key={`${logo}-${idx}`} src={logo} alt="asset" size={26} />
+            ))}
+            {basketLogos.length > 7 && (
+              <span className="asset-chip">+{basketLogos.length - 7}</span>
+            )}
+          </div>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {basket?.items.length ?? 0} assets
+          </span>
+        </div>
+      ) : (
+        <Sparkline points={item.sparkline} color={color} id={item.symbol} />
+      )}
 
       <div className="asset-card__footer">
         <span className="asset-chip">

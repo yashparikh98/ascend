@@ -31,7 +31,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <ConnectionProvider endpoint={endpoint}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <WalletProvider wallets={wallets} autoConnect={false}>
+          <WalletProvider wallets={wallets} autoConnect={true}>
             <WalletModalProvider>{children}</WalletModalProvider>
           </WalletProvider>
         </AuthProvider>

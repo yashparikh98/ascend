@@ -106,24 +106,25 @@ const trending = [
 
 const discoverAssets: DiscoverAsset[] = [
   {
-    symbol: "BTC",
-    name: "Bitcoin",
-    type: "Crypto",
-    change: "+3.2%",
-    timeframe: "24h",
-    price: "$42,180",
-    note: "Crypto",
-    sparkline: [40_200, 40_640, 41_120, 40_880, 41_760, 41_420, 41_960, 42_180],
+    symbol: "xSLV",
+    name: "Silver",
+    type: "commodities",
+    change: "+0.5%",
+    timeframe: "Today",
+    price: "$114",
+    note: "commodities",
+    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
   },
   {
-    symbol: "ETH",
-    name: "Ethereum",
-    type: "Crypto",
-    change: "+1.4%",
-    timeframe: "24h",
-    price: "$2,560",
-    note: "Crypto",
-    sparkline: [2_420, 2_460, 2_440, 2_510, 2_520, 2_540, 2_560, 2_555],
+    symbol: "MAG7",
+    name: "Magnificent 7",
+    type: "Basket",
+    change: "+0.9%",
+    timeframe: "Today",
+    price: "$412.00",
+    note: "US mega-cap basket",
+    basketId: "mag7",
+    sparkline: [398, 401, 404, 406, 408, 409, 411, 412],
   },
   {
     symbol: "NVDAx",
@@ -472,6 +473,34 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
           </div>
         ) : (
           <div className="list-compact">
+            {cashUsd > 0 && (
+              <button
+                className="list-item"
+                type="button"
+                onClick={openOnramp}
+                style={{ width: "100%", textAlign: "left" }}
+              >
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <AssetLogo src={USDC.logoURI} alt="USDC" size={32} />
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <strong>Cash</strong>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      Ready to invest
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <strong>{cashDisplay.primaryText}</strong>
+                  <span
+                    className="muted"
+                    style={{ fontSize: 12, display: "block" }}
+                  >
+                    {cashDisplay.secondaryText}
+                  </span>
+                </div>
+              </button>
+            )}
             {groupedHoldings.map((group) => {
               const display = formatMoney({
                 usdAmount: group.totalUsd,
@@ -612,28 +641,7 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
       </section>
 
       {/* ====== Cash ====== */}
-      <section className="card">
-        <div className="section-title">
-          <h2>Cash</h2>
-          <span className="muted">Ready to invest</span>
-        </div>
-
-        <div className="section-title">
-          <div>
-            <div className="balance">{cashDisplay.primaryText}</div>
-            <p className="muted">Approx: {cashDisplay.secondaryText}</p>
-          </div>
-
-          <button
-            className="pill primary"
-            disabled={loading || demo}
-            onClick={openOnramp}
-            type="button"
-          >
-            Add money
-          </button>
-        </div>
-      </section>
+      {/* Cash moved into holdings list */}
     </div>
   );
 }

@@ -38,7 +38,7 @@ export default function RootLayout({
               <main className="page">{children}</main>
             </div>
 
-            {/* <BottomNav /> */}
+            <BottomNav />
           </div>
         </Providers>
       </body>

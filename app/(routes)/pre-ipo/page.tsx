@@ -9,6 +9,10 @@ import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
 import BuyWidget from "../../components/buy/BuyWidget";
 import OnrampWidget from "../../components/onramp/OnrampWidget";
+import {
+  DiscoverAsset,
+  DiscoverCard,
+} from "../../components/home/DiscoverCard";
 
 const fxRate = 83;
 const TOP_MOVERS = ["xSPACEX", "xOPENAI"];
@@ -16,6 +20,29 @@ const PRICE_FALLBACKS: Record<string, number> = {
   xSPACEX: 40,
   xOPENAI: 28,
 };
+
+const discoverStocks: DiscoverAsset[] = [
+  {
+    symbol: "xSPACEX",
+    name: "SpaceX",
+    type: "pre-ipo",
+    change: "+1.5%",
+    timeframe: "Today",
+    price: "$11.10",
+    note: "pre-ipo",
+    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
+  },
+  {
+    symbol: "xOPENAI",
+    name: "OpenAI",
+    type: "pre-ipo",
+    change: "+0.5%",
+    timeframe: "Today",
+    price: "$278",
+    note: "pre-ipo",
+    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
+  },
+];
 
 export default function PreIPOPage() {
   const { currency } = useCurrency();
@@ -132,128 +159,18 @@ export default function PreIPOPage() {
       <section className="card">
         <div className="section-title">
           <h2>Top movers</h2>
-          <span className="muted">
-            Today {pricesLoading ? "• syncing…" : ""}
-          </span>
+          <span className="muted">Stocks only</span>
         </div>
-        <div className="chip-row">
-          {TOP_MOVERS.map((sym) => {
-            const asset = getAssetBySymbol(sym);
-            const change = asset?.change24h ?? null;
-            const color = changeColor(change);
-            const price = asset
-              ? prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol]
-              : null;
-            return (
-              <button
-                key={sym}
-                className="chip"
-                type="button"
-                onClick={() => setShowBuy(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  color,
-                }}
-              >
-                <AssetLogo src={asset?.logoURI} alt={sym} size={22} />
-                <div style={{ display: "grid" }}>
-                  <span>{sym}</span>
-                  <span className="muted" style={{ color }}>
-                    {change
-                      ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`
-                      : "—"}
-                  </span>
-                  <span className="muted" style={{ fontSize: 11 }}>
-                    {price
-                      ? formatMoney({
-                          usdAmount: price,
-                          inrAmount: price * fxRate,
-                          currency,
-                          fxRate,
-                        }).primaryText
-                      : "Price unavailable"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Discover</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="muted">
-              Live pricing {pricesLoading ? "• syncing…" : ""}
-            </span>
-            <button
-              className="pill compact"
-              type="button"
-              onClick={() => refetchPrices()}
-            >
-              Refresh
-            </button>
-          </div>
+        <div className="discover-grid" role="list">
+          {discoverStocks.map((item) => (
+            <DiscoverCard
+              key={item.symbol}
+              item={item}
+              onSelect={() => setShowBuy(true)}
+            />
+          ))}
         </div>
-        {filtered.length === 0 ? (
-          <div className="info-card">
-            <strong>No matches</strong>
-            <p className="muted">Try another company.</p>
-          </div>
-        ) : (
-          <div className="list-compact">
-            {filtered.map((asset) => {
-              const price =
-                prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol] ?? null;
-              const priceDisplay =
-                price !== null
-                  ? formatMoney({
-                      usdAmount: price,
-                      inrAmount: price * fxRate,
-                      currency,
-                      fxRate,
-                    }).primaryText
-                  : "Price unavailable";
-              const change = asset.change24h ?? null;
-              const color = changeColor(change);
-
-              return (
-                <button
-                  key={asset.mint}
-                  className="list-item"
-                  style={{ width: "100%", textAlign: "left" }}
-                  type="button"
-                  onClick={() => setShowBuy(true)}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <AssetLogo
-                      src={asset.logoURI}
-                      alt={asset.symbol}
-                      size={32}
-                    />
-                    <div>
-                      <strong>{asset.symbol}</strong>
-                      <p className="muted">{asset.name}</p>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <strong>{priceDisplay}</strong>
-                    <p className="muted" style={{ color }}>
-                      {change !== null
-                        ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`
-                        : "—"}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </section>
 
       <section className="card soft">

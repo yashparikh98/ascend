@@ -10,15 +10,51 @@ import { useTokenPrices } from "../../hooks/useTokenPrice";
 import BuyWidget from "../../components/buy/BuyWidget";
 import OnrampWidget from "../../components/onramp/OnrampWidget";
 import { USDC } from "../../config/tokens";
+import {
+  DiscoverAsset,
+  DiscoverCard,
+} from "../../components/home/DiscoverCard";
 
 const fxRate = 83; // mock
-const TOP_MOVERS = ["BTC", "ETH", "SOL"];
 const PRICE_FALLBACKS: Record<string, number> = {
   BTC: 68000,
   ETH: 3200,
   SOL: 180,
   USDC: 1,
 };
+
+const discoverStocks: DiscoverAsset[] = [
+  {
+    symbol: "SOL",
+    name: "Solana",
+    type: "Crypto",
+    change: "+1.5%",
+    timeframe: "Today",
+    price: "$116.10",
+    note: "Crypto",
+    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
+  },
+  {
+    symbol: "ETH",
+    name: "Ethereum",
+    type: "Crypto",
+    change: "+0.5%",
+    timeframe: "Today",
+    price: "$2788",
+    note: "Crypto",
+    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
+  },
+  {
+    symbol: "BTC",
+    name: "Bitcoin",
+    type: "Crypto",
+    change: "+1.8%",
+    timeframe: "Today",
+    price: "$83,251.12",
+    note: "Crypto",
+    sparkline: [180, 181, 182.4, 183.2, 184.1, 185.4, 186.1, 186.1],
+  },
+];
 
 export default function CryptoPage() {
   const { currency } = useCurrency();
@@ -96,7 +132,10 @@ export default function CryptoPage() {
             <p className="muted">Live value of your crypto holdings</p>
           </div>
           <div className="action-row" style={{ width: "fit-content" }}>
-            <button className="pill primary" onClick={() => setShowOnramp(true)}>
+            <button
+              className="pill primary"
+              onClick={() => setShowOnramp(true)}
+            >
               Deposit
             </button>
             <button className="pill" onClick={() => setShowBuy(true)}>
@@ -115,117 +154,6 @@ export default function CryptoPage() {
         </div>
       </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Top movers</h2>
-          <span className="muted">
-            Today {pricesLoading ? "• syncing…" : ""}
-          </span>
-        </div>
-        <div className="chip-row">
-          {TOP_MOVERS.map((sym) => {
-            const asset = getAssetBySymbol(sym);
-            const change = asset?.change24h ?? null;
-            const color = changeColor(change);
-            const price = asset
-              ? prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol]
-              : null;
-            return (
-              <button
-                key={sym}
-                className="chip"
-                type="button"
-                onClick={() => setShowBuy(true)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, color }}
-              >
-                <AssetLogo src={asset?.logoURI} alt={sym} size={22} />
-                <div style={{ display: "grid" }}>
-                  <span>{sym}</span>
-                  <span className="muted" style={{ color }}>
-                    {change
-                      ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`
-                      : "—"}
-                  </span>
-                  <span className="muted" style={{ fontSize: 11 }}>
-                    {price
-                      ? formatMoney({
-                          usdAmount: price,
-                          inrAmount: price * fxRate,
-                          currency,
-                          fxRate,
-                        }).primaryText
-                      : "Price unavailable"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="section-title">
-          <h2>Discover</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="muted">
-              Live pricing {pricesLoading ? "• syncing…" : ""}
-            </span>
-            <button className="pill compact" type="button" onClick={() => refetchPrices()}>
-              Refresh
-            </button>
-          </div>
-        </div>
-        {filtered.length === 0 ? (
-          <div className="info-card">
-            <strong>No matches</strong>
-            <p className="muted">Try another ticker.</p>
-          </div>
-        ) : (
-          <div className="list-compact">
-            {filtered.map((asset) => {
-              const price = prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol] ?? null;
-              const priceDisplay =
-                price !== null
-                  ? formatMoney({
-                      usdAmount: price,
-                      inrAmount: price * fxRate,
-                      currency,
-                      fxRate,
-                    }).primaryText
-                  : "Price unavailable";
-              const change = asset.change24h ?? null;
-              const color = changeColor(change);
-
-              return (
-                <button
-                  key={asset.mint}
-                  className="list-item"
-                  style={{ width: "100%", textAlign: "left" }}
-                  type="button"
-                  onClick={() => setShowBuy(true)}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <AssetLogo src={asset.logoURI} alt={asset.symbol} size={32} />
-                    <div>
-                      <strong>{asset.symbol}</strong>
-                      <p className="muted">{asset.name}</p>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <strong>{priceDisplay}</strong>
-                    <p className="muted" style={{ color }}>
-                      {change !== null
-                        ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`
-                        : "—"}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
       <section className="card soft">
         <div className="section-title">
           <h2>Your holdings</h2>
@@ -236,7 +164,10 @@ export default function CryptoPage() {
             <strong>No crypto holdings yet</strong>
             <p className="muted">Deposit or swap to add crypto.</p>
             <div className="hero-actions">
-              <button className="pill primary" onClick={() => setShowOnramp(true)}>
+              <button
+                className="pill primary"
+                onClick={() => setShowOnramp(true)}
+              >
                 Deposit
               </button>
               <button className="pill" onClick={() => setShowBuy(true)}>
@@ -255,8 +186,14 @@ export default function CryptoPage() {
               }).primaryText;
               return (
                 <div key={h.asset.mint} className="list-item">
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <AssetLogo src={h.asset.logoURI} alt={h.asset.symbol} size={28} />
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  >
+                    <AssetLogo
+                      src={h.asset.logoURI}
+                      alt={h.asset.symbol}
+                      size={28}
+                    />
                     <div>
                       <strong>{h.asset.symbol}</strong>
                       <p className="muted">
@@ -270,6 +207,22 @@ export default function CryptoPage() {
             })}
           </div>
         )}
+      </section>
+      <section className="card">
+        <div className="section-title">
+          <h2>Top movers</h2>
+          <span className="muted">Stocks only</span>
+        </div>
+
+        <div className="discover-grid" role="list">
+          {discoverStocks.map((item) => (
+            <DiscoverCard
+              key={item.symbol}
+              item={item}
+              onSelect={() => setShowBuy(true)}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="info-card">

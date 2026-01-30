@@ -124,7 +124,7 @@ export const PRE_IPO: Asset[] = [
   {
     symbol: "xSPACEX",
     name: "SpaceX",
-    mint: "SpaceXMintAddress111111111111111111111111111",
+    mint: "PreANxuXjsy2pvisWWMNB6YaJNzr7681wJJr2rHsfTh",
     decimals: 9,
     ticker: "SPACEX",
     category: "pre-ipo",
@@ -134,7 +134,7 @@ export const PRE_IPO: Asset[] = [
   {
     symbol: "xOPENAI",
     name: "OpenAI",
-    mint: "OpenAIMintAddress11111111111111111111111111111",
+    mint: "PreweJYECqtQwBtpxHL171nL2K6umo692gTm7Q3rpgF",
     decimals: 9,
     ticker: "OPENAI",
     category: "pre-ipo",
@@ -176,7 +176,7 @@ export const COMMODITIES: Asset[] = [
   {
     symbol: "xGLD",
     name: "Gold",
-    mint: "GoldMintAddress111111111111111111111111111111",
+    mint: "hWfiw4mcxT8rnNFkk6fsCQSxoxgZ9yVhB6tyeVcondo",
     decimals: 9,
     ticker: "GLD",
     category: "commodities",
@@ -186,9 +186,11 @@ export const COMMODITIES: Asset[] = [
   {
     symbol: "xSLV",
     name: "Silver",
-    mint: "SilverMintAddress1111111111111111111111111111",
+    mint: "iy11ytbSGcUnrjE6Lfv78TFqxKyUESfku1FugS9ondo",
     decimals: 9,
     ticker: "SLV",
+    logoURI:
+      "https://wsrv.nl/?w=32&h=32&url=https%3A%2F%2Fremora-public.s3.us-east-2.amazonaws.com%2Flogos%2FSLVr.svg&dpr=2&quality=80",
     category: "commodities",
   },
 ];
