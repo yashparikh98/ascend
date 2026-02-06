@@ -8,7 +8,7 @@ import useCurrency from "./hooks/useCurrency";
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
-  useCurrency(); // initialize currency dataset on <html> via hook side-effect
+  useCurrency();
   const [preview, setPreview] = useState(false);
 
   if (isAuthenticated) {

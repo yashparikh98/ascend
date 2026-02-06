@@ -129,10 +129,12 @@ export function DiscoverCard({
         </span>
       </div>
 
-      <div className="asset-price">
-        <span className="price">{item.price}</span>
-        <span className="muted">{item.timeframe}</span>
-      </div>
+      {!basket && (
+        <div className="asset-price">
+          <span className="price">{item.price}</span>
+          <span className="muted">{item.timeframe}</span>
+        </div>
+      )}
 
       {basket ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

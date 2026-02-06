@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import useCurrency from "../../hooks/useCurrency";
 import useAuth from "../../hooks/useAuth";
 import { formatMoney } from "../../lib/format/formatMoney";
+import {
+  buildSparkline,
+  formatPctChange,
+  formatUsdPrice,
+} from "../../lib/pricing/display";
 import ChartStub from "../shared/ChartStub";
 import BuyWidget from "../buy/BuyWidget";
 import OnrampWidget from "../onramp/OnrampWidget";
@@ -19,7 +24,6 @@ import {
   type AssetCategory,
 } from "../../config/assets";
 import { BasketLogo } from "../shared/BasketLogo";
-import ExploreBaskets from "./ExploreBaskets";
 import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
 import { USDC } from "../../config/tokens";
@@ -35,32 +39,8 @@ const CATEGORY_ROUTE: Record<AssetCategory, string> = {
   index: "/indices",
 };
 
-// If a token has no live price yet, we show a fallback and mark "est."
-const PRICE_FALLBACKS_USD_BY_SYMBOL: Record<string, number> = {
-  // Stocks
-  NVDAx: 134.2,
-  AAPLx: 192.44,
-  MSFTx: 421.12,
-  AMZNx: 186.12,
-  METAx: 488.55,
-  TSLAx: 182.09,
-  GOOGLx: 158.1,
-
-  // Crypto
-  BTC: 68000,
-  ETH: 3200,
-  SOL: 180,
-  USDC: 1,
-
-  // Commodities
-  xGLD: 2320,
-  xSLV: 28.4,
-
-  // Pre-IPO placeholders
-  xSPACEX: 40,
-  xSTRIPE: 32,
-  xOPENAI: 28,
-};
+const DISCOVER_SYMBOLS = ["xSLV", "NVDAx", "xSPACEX"];
+const DISCOVER_BASKET_ID = "mag7";
 
 // Support both old/canonical mints and new "Xs" mints by normalizing to the Xs mint (primary)
 const MINT_TO_PRIMARY: Record<string, string> = {
@@ -97,78 +77,11 @@ const MINT_TO_PRIMARY: Record<string, string> = {
     "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
 };
 
-const trending = [
-  { symbol: "AMZNx", move: "+2.3%" },
-  { symbol: "METAx", move: "+1.4%" },
-  { symbol: "xSPACEX", move: "+2.4%" },
-  { symbol: "MAG7", basketId: "mag7", move: "+0.8%" },
-];
-
-const discoverAssets: DiscoverAsset[] = [
-  {
-    symbol: "xSLV",
-    name: "Silver",
-    type: "commodities",
-    change: "+0.5%",
-    timeframe: "Today",
-    price: "$114",
-    note: "commodities",
-    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
-  },
-  {
-    symbol: "MAG7",
-    name: "Magnificent 7",
-    type: "Basket",
-    change: "+0.9%",
-    timeframe: "Today",
-    price: "$412.00",
-    note: "US mega-cap basket",
-    basketId: "mag7",
-    sparkline: [398, 401, 404, 406, 408, 409, 411, 412],
-  },
-  {
-    symbol: "NVDAx",
-    name: "NVIDIA",
-    type: "Stock",
-    change: "+1.1%",
-    timeframe: "Today",
-    price: "$608.10",
-    note: "US stock access",
-    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
-  },
-  {
-    symbol: "xSPACEX",
-    name: "SpaceX",
-    type: "Pre-IPO",
-    change: "+2.4%",
-    timeframe: "Today",
-    price: "$85.00",
-    note: "Pre-IPO access",
-    sparkline: [78, 80, 81, 82, 83.5, 84, 84.6, 85],
-  },
-];
-
 type ActiveModal = "buy" | "onramp" | "dca" | "basket" | null;
 
 function safeNumber(v: any, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function formatINR(n: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function formatUSD(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(n);
 }
 
 export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
@@ -181,13 +94,30 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
     error: balancesError,
   } = useTokenBalances();
 
-  // Ask prices only for mints we actually hold (non-zero), excluding USDC (we hardcode $1)
+  // Fetch prices for holdings plus discover/basket previews.
   const priceMints = useMemo(() => {
-    if (!balances) return [];
-    return Object.keys(balances).filter((mint) => {
-      if (mint === USDC.mint) return false;
-      return safeNumber(balances[mint]?.uiAmount, 0) > 0;
+    const mintSet = new Set<string>();
+
+    if (balances) {
+      Object.keys(balances).forEach((mint) => {
+        if (mint === USDC.mint) return;
+        if (safeNumber(balances[mint]?.uiAmount, 0) <= 0) return;
+        const primaryMint = MINT_TO_PRIMARY[mint] ?? mint;
+        mintSet.add(primaryMint);
+      });
+    }
+
+    DISCOVER_SYMBOLS.forEach((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (asset?.mint) mintSet.add(asset.mint);
     });
+
+    const discoverBasket = BASKETS.find((basket) => basket.id === DISCOVER_BASKET_ID);
+    discoverBasket?.items.forEach((item) => {
+      if (item.mint) mintSet.add(item.mint);
+    });
+
+    return Array.from(mintSet);
   }, [balances]);
 
   const {
@@ -236,11 +166,7 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
           0
         );
 
-        // Fallback price by symbol (USD)
-        const fallback = safeNumber(PRICE_FALLBACKS_USD_BY_SYMBOL[symbol], 0);
-
-        const priceUsd = live > 0 ? live : fallback;
-        const isPriceFallback = !(live > 0) && priceUsd > 0;
+        const priceUsd = live > 0 ? live : 0;
 
         const uiAmount = safeNumber(bal.uiAmount, 0);
         const valueUsd = uiAmount * (priceUsd || 0);
@@ -254,7 +180,6 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
           logoURI,
           category,
           priceUsd,
-          isPriceFallback,
           valueUsd,
           // if you later add real 24h change in assets.ts, this will show it
           change:
@@ -275,6 +200,56 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
 
     return rows;
   }, [balances, pricesUsdByMint]);
+
+  const discoverAssets = useMemo<DiscoverAsset[]>(() => {
+    const cards = DISCOVER_SYMBOLS.map((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (!asset) return null;
+      const livePrice = pricesUsdByMint?.[asset.mint] ?? null;
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        type:
+          asset.category === "pre-ipo"
+            ? "Pre-IPO"
+            : asset.category === "commodities"
+              ? "Commodity"
+              : asset.category === "stocks"
+                ? "Stock"
+                : "Crypto",
+        change: formatPctChange(asset.change24h),
+        timeframe: "Live",
+        price: formatUsdPrice(livePrice),
+        note: "On-chain market",
+        sparkline: buildSparkline(asset.symbol, livePrice),
+      };
+    }).filter(Boolean) as DiscoverAsset[];
+
+    const discoverBasket = BASKETS.find((basket) => basket.id === DISCOVER_BASKET_ID);
+    if (discoverBasket) {
+      const pricedItems = discoverBasket.items
+        .map((item) => safeNumber(pricesUsdByMint?.[item.mint], 0))
+        .filter((price) => price > 0);
+      const basketPrice =
+        pricedItems.length > 0
+          ? pricedItems.reduce((sum, price) => sum + price, 0) / pricedItems.length
+          : null;
+
+      cards.splice(1, 0, {
+        symbol: discoverBasket.id.toUpperCase(),
+        name: discoverBasket.name,
+        type: "Basket",
+        change: "—",
+        timeframe: "Live",
+        price: formatUsdPrice(basketPrice),
+        note: discoverBasket.description,
+        basketId: discoverBasket.id,
+        sparkline: buildSparkline(discoverBasket.id, basketPrice),
+      });
+    }
+
+    return cards;
+  }, [pricesUsdByMint]);
 
   const cashUsd = safeNumber(balances?.[USDC.mint]?.uiAmount, 0);
 
@@ -492,12 +467,6 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
 
                 <div style={{ textAlign: "right" }}>
                   <strong>{cashDisplay.primaryText}</strong>
-                  <span
-                    className="muted"
-                    style={{ fontSize: 12, display: "block" }}
-                  >
-                    {cashDisplay.secondaryText}
-                  </span>
                 </div>
               </button>
             )}
@@ -547,12 +516,6 @@ export default function LoggedInHome({ demo = false }: { demo?: boolean }) {
 
                   <div style={{ textAlign: "right" }}>
                     <strong>{display.primaryText}</strong>
-                    <span
-                      className="muted"
-                      style={{ fontSize: 12, display: "block" }}
-                    >
-                      {display.secondaryText}
-                    </span>
                   </div>
                 </button>
               );

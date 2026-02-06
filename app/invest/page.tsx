@@ -9,12 +9,15 @@ import { DiscoverCard, DiscoverAsset } from "../components/home/DiscoverCard";
 import { AssetLogo } from "../components/shared/AssetLogo";
 import useCurrency from "../hooks/useCurrency";
 import { formatMoney } from "../lib/format/formatMoney";
+import {
+  buildSparkline,
+  formatPctChange,
+  formatUsdPrice,
+} from "../lib/pricing/display";
 import { useTokenBalances } from "../hooks/useTokenBalances";
 import { useTokenPrices } from "../hooks/useTokenPrice";
-import { USDC } from "../config/tokens";
 import { useRouter } from "next/navigation";
 import { BASKETS } from "../config/baskets";
-import { BasketLogo } from "../components/shared/BasketLogo";
 
 type TabKey = Exclude<AssetCategory, "index"> | "baskets";
 
@@ -25,39 +28,6 @@ const MOBILE_TABS: { key: TabKey; label: string }[] = [
   { key: "pre-ipo", label: "Pre-IPO" },
   { key: "baskets", label: "Baskets" },
 ];
-
-function buildSpark(base: number, variance = 0.02, points = 8) {
-  const out: number[] = [];
-  let val = base;
-  for (let i = 0; i < points; i++) {
-    const delta =
-      base * (Math.random() * variance * (Math.random() > 0.5 ? 1 : -1));
-    val = Math.max(0, val + delta);
-    out.push(Number(val.toFixed(2)));
-  }
-  return out;
-}
-
-function toDiscover(asset: any): DiscoverAsset {
-  const price = asset.price ?? asset.fallbackPrice ?? 100;
-  const change =
-    typeof asset.change24h === "number"
-      ? `${asset.change24h >= 0 ? "+" : ""}${asset.change24h.toFixed(1)}%`
-      : "+0.8%";
-  return {
-    symbol: asset.symbol,
-    name: asset.name,
-    type:
-      asset.category === "pre-ipo"
-        ? "Pre-IPO"
-        : asset.category[0].toUpperCase() + asset.category.slice(1),
-    change,
-    timeframe: "Today",
-    price: `$${price}`,
-    note: asset.category === "pre-ipo" ? "Late-stage" : undefined,
-    sparkline: buildSpark(price),
-  };
-}
 
 export default function InvestPage() {
   const [tab, setTab] = useState<TabKey>("stocks");
@@ -79,7 +49,21 @@ export default function InvestPage() {
     return getAssetsByCategory(tab as AssetCategory);
   }, [tab]);
 
-  const priceMints = useMemo(() => assets.map((a) => a.mint), [assets]);
+  const basketMints = useMemo(() => {
+    const mints = new Set<string>();
+    BASKETS.forEach((basket) => {
+      basket.items.forEach((item) => {
+        if (item.mint) mints.add(item.mint);
+      });
+    });
+    return Array.from(mints);
+  }, []);
+
+  const priceMints = useMemo(() => {
+    if (tab === "baskets") return basketMints;
+    return assets.map((a) => a.mint);
+  }, [assets, basketMints, tab]);
+
   const { data: balances } = useTokenBalances();
   const { data: prices } = useTokenPrices(priceMints);
 
@@ -89,16 +73,51 @@ export default function InvestPage() {
         symbol: b.id.toUpperCase(),
         name: b.name,
         type: "Basket",
-        change: "+0.8%",
-        timeframe: "Today",
-        price: "$100",
+        change: "—",
+        timeframe: "Live",
+        price: formatUsdPrice(
+          (() => {
+            const pricedItems = b.items
+              .map((item) => ({
+                price: prices?.[item.mint] ?? 0,
+                weight: item.weight,
+              }))
+              .filter((row) => row.price > 0 && row.weight > 0);
+            const pricedWeight = pricedItems.reduce(
+              (sum, row) => sum + row.weight,
+              0
+            );
+            if (pricedWeight <= 0) return null;
+            return (
+              pricedItems.reduce(
+                (sum, row) => sum + row.price * (row.weight / pricedWeight),
+                0
+              ) ?? null
+            );
+          })()
+        ),
         note: b.description,
         basketId: b.id,
-        sparkline: buildSpark(100),
+        sparkline: buildSparkline(b.id, prices?.[b.items[0]?.mint] ?? null),
       }));
     }
-    return assets.slice(0, 6).map(toDiscover);
-  }, [assets, tab]);
+    return assets.slice(0, 6).map<DiscoverAsset>((asset) => {
+      const livePrice = prices?.[asset.mint] ?? null;
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        type:
+          asset.category === "pre-ipo"
+            ? "Pre-IPO"
+            : asset.category[0].toUpperCase() + asset.category.slice(1),
+        change: formatPctChange(asset.change24h),
+        timeframe: "Live",
+        price: formatUsdPrice(livePrice),
+        note: asset.category === "pre-ipo" ? "Late-stage" : "On-chain market",
+        sparkline: buildSparkline(asset.symbol, livePrice),
+      };
+    });
+  }, [assets, prices, tab]);
 
   const holdings = useMemo(() => {
     if (!balances || tab === "baskets") return [];
@@ -107,11 +126,7 @@ export default function InvestPage() {
         const bal = balances[asset.mint];
         const uiAmount = bal?.uiAmount ?? 0;
         if (uiAmount <= 0) return null;
-        const price =
-          prices?.[asset.mint] ??
-          (asset as any).price ??
-          (asset as any).fallbackPrice ??
-          0;
+        const price = prices?.[asset.mint] ?? 0;
         const valueUsd = uiAmount * price;
         return { asset, uiAmount, price, valueUsd };
       })
@@ -209,9 +224,6 @@ export default function InvestPage() {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <strong>{display.primaryText}</strong>
-                    <p className="muted" style={{ fontSize: 12 }}>
-                      {display.secondaryText}
-                    </p>
                   </div>
                 </div>
               );

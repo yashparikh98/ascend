@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import CurrencyToggle from "../CurrencyToggle";
 import UnifiedWallet from "../wallet/UnifiedWallet";
 
 const links = [
@@ -38,7 +37,6 @@ export default function TopbarActions() {
           </div>
         )}
       </div>
-      <CurrencyToggle />
       <UnifiedWallet />
     </div>
   );

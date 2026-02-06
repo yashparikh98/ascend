@@ -7,6 +7,11 @@ import useCurrency from "../../hooks/useCurrency";
 import { formatMoney } from "../../lib/format/formatMoney";
 import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
+import {
+  buildSparkline,
+  formatPctChange,
+  formatUsdPrice,
+} from "../../lib/pricing/display";
 import BuyWidget from "../../components/buy/BuyWidget";
 import OnrampWidget from "../../components/onramp/OnrampWidget";
 import {
@@ -15,34 +20,7 @@ import {
 } from "../../components/home/DiscoverCard";
 
 const fxRate = 83;
-const TOP_MOVERS = ["xGLD", "xSLV"];
-const PRICE_FALLBACKS: Record<string, number> = {
-  xGLD: 2320,
-  xSLV: 28.4,
-};
-
-const discoverStocks: DiscoverAsset[] = [
-  {
-    symbol: "xGLD",
-    name: "Gold",
-    type: "commodities",
-    change: "+1.5%",
-    timeframe: "Today",
-    price: "$5,314.10",
-    note: "commodities",
-    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
-  },
-  {
-    symbol: "xSLV",
-    name: "Silver",
-    type: "commodities",
-    change: "+0.5%",
-    timeframe: "Today",
-    price: "$114",
-    note: "commodities",
-    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
-  },
-];
+const DISCOVER_SYMBOLS = ["xGLD", "xSLV"];
 
 export default function CommoditiesPage() {
   const { currency } = useCurrency();
@@ -70,7 +48,7 @@ export default function CommoditiesPage() {
     return COMMODITIES.map((asset) => {
       const bal = balances[asset.mint];
       if (!bal || (bal.uiAmount ?? 0) <= 0) return null;
-      const price = prices?.[asset.mint] ?? PRICE_FALLBACKS[asset.symbol] ?? 0;
+      const price = prices?.[asset.mint] ?? 0;
       const valueUsd = (bal.uiAmount ?? 0) * price;
       return {
         asset,
@@ -85,6 +63,24 @@ export default function CommoditiesPage() {
       valueUsd: number;
     }[];
   }, [balances, prices]);
+
+  const discoverAssets = useMemo<DiscoverAsset[]>(() => {
+    return DISCOVER_SYMBOLS.map((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (!asset) return null;
+      const livePrice = prices?.[asset.mint] ?? null;
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        type: "Commodities",
+        change: formatPctChange(asset.change24h),
+        timeframe: "Live",
+        price: formatUsdPrice(livePrice),
+        note: "On-chain market",
+        sparkline: buildSparkline(asset.symbol, livePrice),
+      };
+    }).filter(Boolean) as DiscoverAsset[];
+  }, [prices]);
 
   const totalUsd = useMemo(
     () => holdings.reduce((sum, h) => sum + h.valueUsd, 0),
@@ -149,7 +145,7 @@ export default function CommoditiesPage() {
         </div>
 
         <div className="discover-grid" role="list">
-          {discoverStocks.map((item) => (
+          {discoverAssets.map((item) => (
             <DiscoverCard
               key={item.symbol}
               item={item}

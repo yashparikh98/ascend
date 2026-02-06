@@ -1,8 +1,16 @@
 type Currency = "USD" | "INR";
 
 const formatters: Record<Currency, Intl.NumberFormat> = {
-  INR: new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }),
-  USD: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+  INR: new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }),
+  USD: new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }),
 };
 
 export function formatMoney({
@@ -16,13 +24,12 @@ export function formatMoney({
   currency: Currency;
   fxRate?: number;
 }) {
-  const primary = currency === "USD" ? usdAmount : inrAmount ?? usdAmount * fxRate;
-  const secondary = currency === "USD" ? inrAmount ?? usdAmount * fxRate : usdAmount;
-
-  const primaryText = formatters[currency].format(primary);
-  const secondaryText = currency === "USD"
-    ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(secondary)
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(secondary);
+  const inrValue = inrAmount ?? usdAmount * fxRate;
+  const usdValue = usdAmount;
+  const inrText = formatters.INR.format(inrValue);
+  const usdText = formatters.USD.format(usdValue);
+  const primaryText = `${inrText} (${usdText})`;
+  const secondaryText = usdText;
 
   return { primaryText, secondaryText };
 }

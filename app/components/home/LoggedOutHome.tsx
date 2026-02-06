@@ -1,8 +1,15 @@
 import LearnMoreModal from "../shared/LearnMoreModal";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { BASKETS } from "../../config/baskets";
+import { getAssetBySymbol } from "../../config/assets";
 import { BasketLogo } from "../shared/BasketLogo";
 import { DiscoverCard, DiscoverAsset } from "./DiscoverCard";
+import { useTokenPrices } from "../../hooks/useTokenPrice";
+import {
+  buildSparkline,
+  formatPctChange,
+  formatUsdPrice,
+} from "../../lib/pricing/display";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 type Props = {
@@ -21,49 +28,8 @@ const categories = [
   { key: "Commodities", desc: "Gold, etc." },
 ];
 
-const discoverAssets: DiscoverAsset[] = [
-  {
-    symbol: "xSLV",
-    name: "Silver",
-    type: "Commodity",
-    change: "+0.5%",
-    timeframe: "Today",
-    price: "$28.40",
-    note: "Industrial metal",
-    sparkline: [27.8, 27.9, 28, 28.1, 28.2, 28.3, 28.5, 28.4],
-  },
-  {
-    symbol: "MAG7",
-    name: "Magnificent 7",
-    type: "Basket",
-    change: "+0.9%",
-    timeframe: "Today",
-    price: "$412.00",
-    note: "US mega-cap basket",
-    basketId: "mag7",
-    sparkline: [398, 401, 404, 406, 408, 409, 411, 412],
-  },
-  {
-    symbol: "NVDAx",
-    name: "NVIDIA",
-    type: "Stock",
-    change: "+1.1%",
-    timeframe: "Today",
-    price: "$608.10",
-    note: "US stock access",
-    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
-  },
-  {
-    symbol: "xSPACEX",
-    name: "SpaceX",
-    type: "Pre-IPO",
-    change: "+2.4%",
-    timeframe: "Today",
-    price: "$85.00",
-    note: "Pre-IPO access",
-    sparkline: [78, 80, 81, 82, 83.5, 84, 84.6, 85],
-  },
-];
+const DISCOVER_SYMBOLS = ["xSLV", "NVDAx", "xSPACEX"];
+const DISCOVER_BASKET_ID = "mag7";
 
 export default function LoggedOutHome({
   onPreview,
@@ -74,6 +40,76 @@ export default function LoggedOutHome({
 }: Props) {
   const [showModal, setShowModal] = useState(false);
   const { setVisible } = useWalletModal();
+
+  const discoverMints = useMemo(() => {
+    const mintSet = new Set<string>();
+    DISCOVER_SYMBOLS.forEach((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (asset?.mint) mintSet.add(asset.mint);
+    });
+    const discoverBasket = BASKETS.find(
+      (basket) => basket.id === DISCOVER_BASKET_ID
+    );
+    discoverBasket?.items.forEach((item) => {
+      if (item.mint) mintSet.add(item.mint);
+    });
+    return Array.from(mintSet);
+  }, []);
+
+  const { data: prices } = useTokenPrices(discoverMints);
+
+  const discoverAssets = useMemo<DiscoverAsset[]>(() => {
+    const cards = DISCOVER_SYMBOLS.map((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (!asset) return null;
+      const livePrice = prices?.[asset.mint] ?? null;
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        type:
+          asset.category === "pre-ipo"
+            ? "Pre-IPO"
+            : asset.category === "commodities"
+            ? "Commodity"
+            : asset.category === "stocks"
+            ? "Stock"
+            : "Crypto",
+        change: formatPctChange(asset.change24h),
+        timeframe: "Live",
+        price: formatUsdPrice(livePrice),
+        note: "On-chain market",
+        sparkline: buildSparkline(asset.symbol, livePrice),
+      };
+    }).filter(Boolean) as DiscoverAsset[];
+
+    const discoverBasket = BASKETS.find(
+      (basket) => basket.id === DISCOVER_BASKET_ID
+    );
+    if (discoverBasket) {
+      const pricedItems = discoverBasket.items
+        .map((item) => Number(prices?.[item.mint] ?? 0))
+        .filter((price) => price > 0);
+      const basketPrice =
+        pricedItems.length > 0
+          ? pricedItems.reduce((sum, price) => sum + price, 0) /
+            pricedItems.length
+          : null;
+
+      cards.splice(1, 0, {
+        symbol: discoverBasket.id.toUpperCase(),
+        name: discoverBasket.name,
+        type: "Basket",
+        change: "—",
+        timeframe: "Live",
+        price: formatUsdPrice(basketPrice),
+        note: discoverBasket.description,
+        basketId: discoverBasket.id,
+        sparkline: buildSparkline(discoverBasket.id, basketPrice),
+      });
+    }
+
+    return cards;
+  }, [prices]);
 
   const handleConnect = useCallback(() => {
     if (onConnect) {
@@ -97,7 +133,7 @@ export default function LoggedOutHome({
         <div className="hero-actions">
           <button
             className="pill primary"
-            onClick={onCreateAccount ?? handleConnect}
+            // onClick={onCreateAccount ?? handleConnect}
             type="button"
           >
             Get Early Access
@@ -118,11 +154,6 @@ export default function LoggedOutHome({
             <p className="muted">
               Own multiple assets at once instead of picking individual trades.
             </p>
-            <ul className="dot-list">
-              <li>Curated investment baskets</li>
-              <li>Built for long-term exposure</li>
-              <li>Simple, disciplined investing</li>
-            </ul>
           </div>
           <div className="hero-highlight">
             <div className="hero-highlight__header">
@@ -137,37 +168,7 @@ export default function LoggedOutHome({
             <p className="muted">
               Uninvested cash earns up to 10% yield via stablecoins.
             </p>
-            <ul className="dot-list">
-              <li>No lockups or cliffs</li>
-              <li>Transparent, fully on-chain</li>
-              <li>Move in or out anytime</li>
-            </ul>
           </div>
-        </div>
-
-        {/* Make categories actionable + clearer than plain chips */}
-        <div className="scroll-row" aria-label="Categories">
-          {categories.map((cat) => (
-            <button
-              key={cat.key}
-              className="chip"
-              type="button"
-              onClick={() => onCategory?.(cat.key)}
-              aria-label={`Browse ${cat.key}`}
-            >
-              <span style={{ fontWeight: 600 }}>{cat.key}</span>
-              <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-                {cat.desc}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Trust chips: keep it short */}
-        <div className="chip-row" aria-label="Trust">
-          <span className="chip">Regulated partners</span>
-          <span className="chip">INR onramp</span>
-          <span className="chip">Transparent fees</span>
         </div>
       </section>
 
@@ -185,11 +186,7 @@ export default function LoggedOutHome({
         </div>
 
         <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-          <button
-            className="pill primary"
-            type="button"
-            onClick={handleConnect}
-          >
+          <button className="pill primary" type="button">
             Connect to invest
           </button>
           <button
@@ -222,11 +219,7 @@ export default function LoggedOutHome({
                   </p>
                 </div>
               </div>
-              <button
-                className="pill primary compact"
-                type="button"
-                onClick={onPreview}
-              >
+              <button className="pill primary compact" type="button">
                 Preview
               </button>
             </div>

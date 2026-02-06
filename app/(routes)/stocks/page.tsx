@@ -7,6 +7,11 @@ import useCurrency from "../../hooks/useCurrency";
 import { formatMoney } from "../../lib/format/formatMoney";
 import { useTokenBalances } from "../../hooks/useTokenBalances";
 import { useTokenPrices } from "../../hooks/useTokenPrice";
+import {
+  buildSparkline,
+  formatPctChange,
+  formatUsdPrice,
+} from "../../lib/pricing/display";
 import BuyWidget from "../../components/buy/BuyWidget";
 import OnrampWidget from "../../components/onramp/OnrampWidget";
 import {
@@ -14,60 +19,8 @@ import {
   DiscoverCard,
 } from "../../components/home/DiscoverCard";
 
-const discoverStocks: DiscoverAsset[] = [
-  {
-    symbol: "NVDAx",
-    name: "NVIDIA",
-    type: "Stock",
-    change: "+1.1%",
-    timeframe: "Today",
-    price: "$608.10",
-    note: "US stock access",
-    sparkline: [598.4, 601.2, 603.8, 602.4, 604.6, 606.8, 607.2, 608.1],
-  },
-  {
-    symbol: "AAPLx",
-    name: "Apple",
-    type: "Stock",
-    change: "+0.8%",
-    timeframe: "Today",
-    price: "$192.44",
-    note: "Consumer tech",
-    sparkline: [188, 189, 190, 191, 191.6, 192, 192.3, 192.4],
-  },
-  {
-    symbol: "AMZNx",
-    name: "Amazon",
-    type: "Stock",
-    change: "+1.4%",
-    timeframe: "Today",
-    price: "$186.12",
-    note: "E-commerce",
-    sparkline: [180, 181, 182.4, 183.2, 184.1, 185.4, 186.1, 186.1],
-  },
-  {
-    symbol: "MSFTx",
-    name: "Microsoft",
-    type: "Stock",
-    change: "+0.9%",
-    timeframe: "Today",
-    price: "$421.12",
-    note: "Productivity + AI",
-    sparkline: [410, 412, 414, 415.6, 417.2, 419, 420.4, 421.1],
-  },
-];
-
 const fxRate = 83; // INR conversion (mock)
-// Fallbacks for xStocks when live price is missing
-const PRICE_FALLBACKS: Record<string, number> = {
-  NVDAx: 134.2,
-  AAPLx: 192.44,
-  MSFTx: 421.12,
-  AMZNx: 186.12,
-  METAx: 488.55,
-  TSLAx: 182.09,
-  GOOGLx: 158.1,
-};
+const DISCOVER_SYMBOLS = ["NVDAx", "AAPLx", "AMZNx", "MSFTx"];
 
 // Normalize mints to the Xs versions (primary) so quotes & holdings align
 const MINT_TO_PRIMARY: Record<string, string> = {
@@ -103,8 +56,6 @@ const MINT_TO_PRIMARY: Record<string, string> = {
     "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
 };
 
-const topMovers = ["NVDAx", "AMZNx", "METAx"];
-
 export default function StocksPage() {
   const { currency } = useCurrency();
   const { data: balances } = useTokenBalances();
@@ -139,8 +90,7 @@ export default function StocksPage() {
         const uiAmount = bal?.uiAmount ?? 0;
         if (uiAmount <= 0) return null;
 
-        const price =
-          prices?.[primaryMint] ?? PRICE_FALLBACKS[asset.symbol] ?? 0;
+        const price = prices?.[primaryMint] ?? 0;
         const valueUsd = uiAmount * price;
 
         return {
@@ -158,6 +108,25 @@ export default function StocksPage() {
       price: number;
     }[];
   }, [balances, prices]);
+
+  const discoverStocks = useMemo<DiscoverAsset[]>(() => {
+    return DISCOVER_SYMBOLS.map((symbol) => {
+      const asset = getAssetBySymbol(symbol);
+      if (!asset) return null;
+
+      const livePrice = prices?.[asset.mint] ?? null;
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        type: "Stock",
+        change: formatPctChange(asset.change24h),
+        timeframe: "Live",
+        price: formatUsdPrice(livePrice),
+        note: "On-chain market",
+        sparkline: buildSparkline(asset.symbol, livePrice),
+      };
+    }).filter(Boolean) as DiscoverAsset[];
+  }, [prices]);
 
   const totalUsd = useMemo(
     () => holdings.reduce((sum, h) => sum + h.valueUsd, 0),
@@ -186,7 +155,7 @@ export default function StocksPage() {
       <section className="hero-card">
         <h1>US Stocks</h1>
         <p className="muted">
-          Fractional, tokenized US equities. Clear fees, INR/USD toggle on top.
+          Fractional, tokenized US equities. Prices shown in INR and USD.
         </p>
         <div className="section-title" style={{ marginTop: 8 }}>
           <div>
@@ -270,16 +239,13 @@ export default function StocksPage() {
                           className="muted"
                           style={{ fontSize: 12, marginLeft: 6 }}
                         >
-                          {priceMoney.primaryText} ({priceMoney.secondaryText})
+                          {priceMoney.primaryText}
                         </span>
                       </p>
                     </div>
                   </div>
-                  <div style={{ textAlign: "right", display: "grid", gap: 2 }}>
+                  <div style={{ textAlign: "right" }}>
                     <strong>{money.primaryText}</strong>
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      {money.secondaryText}
-                    </span>
                   </div>
                 </div>
               );

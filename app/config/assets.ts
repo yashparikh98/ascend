@@ -85,6 +85,16 @@ export const STOCKS: Asset[] = [
     logoURI:
       "https://wsrv.nl/?w=32&h=32&url=https%3A%2F%2Fxstocks-metadata.backed.fi%2Flogos%2Ftokens%2FMSFTx.png&dpr=2&quality=80",
   },
+  {
+    symbol: "COINx",
+    name: "Coinbase xStock",
+    mint: "CbNYA9n3927sKrDffRomi6jkJn2ULL5NWP9mpt3hprvL",
+    decimals: 9,
+    ticker: "COIN",
+    category: "stocks",
+    logoURI:
+      "https://wsrv.nl/?w=32&h=32&url=https%3A%2F%2Fxstocks-metadata.backed.fi%2Flogos%2Ftokens%2FCOINx.png&dpr=2&quality=80",
+  },
 ];
 
 export const CRYPTO: Asset[] = [

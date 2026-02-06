@@ -2,58 +2,182 @@
 
 import { NextResponse } from "next/server";
 
-// Temporary fallback quotes for xStocks and majors while a real price API
-// integration is pending. Extend this map as you add assets.
-const FALLBACK_QUOTES: Record<string, number> = {
-  NVDA: 134.2,
-  AAPL: 192.44,
-  MSFT: 421.12,
-  AMZN: 186.12,
-  META: 488.55,
-  TSLA: 182.09,
-  GOOGL: 158.1,
-  BTC: 68000,
-  ETH: 3200,
-  SOL: 180,
+const DEXSCREENER_CHAIN_ID = "solana";
+const DEXSCREENER_CHUNK_SIZE = 30;
+
+type DexPair = {
+  pairAddress?: string;
+  priceUsd?: string | number;
+  priceNative?: string | number;
+  baseToken?: {
+    address?: string;
+  };
+  quoteToken?: {
+    address?: string;
+  };
+  liquidity?: {
+    usd?: string | number;
+  };
+  volume?: {
+    h24?: string | number;
+  };
 };
+
+type BestQuote = {
+  priceUsd: number;
+  pairAddress: string;
+  liquidityUsd: number;
+  volume24h: number;
+};
+
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  if (size <= 0) return [arr];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
+function isBetterQuote(current: BestQuote | undefined, candidate: BestQuote) {
+  if (!current) return true;
+  if (candidate.liquidityUsd !== current.liquidityUsd) {
+    return candidate.liquidityUsd > current.liquidityUsd;
+  }
+  if (candidate.volume24h !== current.volume24h) {
+    return candidate.volume24h > current.volume24h;
+  }
+  return false;
+}
+
+function deriveTokenPriceUsd(pair: DexPair, mint: string): number | null {
+  const base = pair.baseToken?.address;
+  const quote = pair.quoteToken?.address;
+  const baseUsd = toFiniteNumber(pair.priceUsd);
+
+  if (!baseUsd || baseUsd <= 0) return null;
+  if (base === mint) return baseUsd;
+  if (quote !== mint) return null;
+
+  const baseInQuote = toFiniteNumber(pair.priceNative);
+  if (!baseInQuote || baseInQuote <= 0) return null;
+
+  const quoteUsd = baseUsd / baseInQuote;
+  if (!Number.isFinite(quoteUsd) || quoteUsd <= 0) return null;
+  return quoteUsd;
+}
+
+async function fetchPairsForMints(mints: string[]) {
+  const url = `https://api.dexscreener.com/tokens/v1/${DEXSCREENER_CHAIN_ID}/${mints.join(",")}`;
+
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`DexScreener request failed (${response.status})`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data) ? (data as DexPair[]) : [];
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const symbolsParam = url.searchParams.get("symbols") ?? "";
-  const symbols = symbolsParam
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
+  const mintsParam = url.searchParams.get("mints") ?? "";
+  const mints = Array.from(
+    new Set(
+      mintsParam
+        .split(",")
+        .map((mint) => mint.trim())
+        .filter(Boolean)
+    )
+  );
 
-  // If no symbols passed, return 400
-  if (symbols.length === 0) {
+  if (mints.length === 0) {
     return NextResponse.json(
-      { error: "symbols query param is required" },
+      { error: "mints query param is required" },
       { status: 400 }
     );
   }
 
-  // Build response using fallbacks
-  const result: Record<string, { quote: number; source: string }> = {};
-  symbols.forEach((sym) => {
-    const price = FALLBACK_QUOTES[sym];
-    if (price !== undefined) {
-      result[sym] = { quote: price, source: "fallback" };
-    }
-  });
+  // Defensive cap to avoid oversized query strings / accidental abuse.
+  const requestedMints = mints.slice(0, 240);
+  const requestedMintSet = new Set(requestedMints);
 
-  // If only one symbol, support single-object response shape used elsewhere
-  if (symbols.length === 1) {
-    const sym = symbols[0];
-    const found = result[sym];
-    if (!found) {
-      return NextResponse.json(
-        { error: `No price for ${sym}` },
-        { status: 404 }
-      );
+  const chunks = chunk(requestedMints, DEXSCREENER_CHUNK_SIZE);
+  const pairResults = await Promise.allSettled(
+    chunks.map((mintChunk) => fetchPairsForMints(mintChunk))
+  );
+
+  const bestQuotes: Record<string, BestQuote> = {};
+  let successfulChunks = 0;
+
+  for (const result of pairResults) {
+    if (result.status !== "fulfilled") continue;
+    successfulChunks += 1;
+
+    for (const pair of result.value) {
+      const liquidityUsd = toFiniteNumber(pair.liquidity?.usd) ?? 0;
+      const volume24h = toFiniteNumber(pair.volume?.h24) ?? 0;
+      const pairAddress = pair.pairAddress ?? "";
+      if (!pairAddress) continue;
+
+      const candidateMints = [pair.baseToken?.address, pair.quoteToken?.address]
+        .filter((address): address is string => !!address)
+        .filter((address) => requestedMintSet.has(address));
+
+      for (const mint of candidateMints) {
+        const priceUsd = deriveTokenPriceUsd(pair, mint);
+        if (!priceUsd) continue;
+
+        const candidate: BestQuote = {
+          priceUsd,
+          pairAddress,
+          liquidityUsd,
+          volume24h,
+        };
+
+        if (isBetterQuote(bestQuotes[mint], candidate)) {
+          bestQuotes[mint] = candidate;
+        }
+      }
     }
-    return NextResponse.json({ quote: found.quote, source: found.source });
   }
 
-  return NextResponse.json(result);
+  if (successfulChunks === 0) {
+    return NextResponse.json(
+      { error: "Failed to fetch token prices from DexScreener" },
+      { status: 502 }
+    );
+  }
+
+  const prices: Record<string, number> = {};
+  const meta: Record<string, { pairAddress: string; liquidityUsd: number }> =
+    {};
+
+  for (const mint of requestedMints) {
+    const quote = bestQuotes[mint];
+    if (!quote) continue;
+    prices[mint] = quote.priceUsd;
+    meta[mint] = {
+      pairAddress: quote.pairAddress,
+      liquidityUsd: quote.liquidityUsd,
+    };
+  }
+
+  return NextResponse.json({
+    source: "dexscreener",
+    chainId: DEXSCREENER_CHAIN_ID,
+    prices,
+    meta,
+    timestamp: Date.now(),
+  });
 }
